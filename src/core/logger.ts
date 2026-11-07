@@ -17,7 +17,8 @@ const REDACT = [
   '*.Authorization',
 ];
 
-export function createLogger(level: string, pretty = process.stdout.isTTY): Logger {
+/** Pretty output only for interactive development; pino-pretty isn't in the production image. */
+export function createLogger(level: string, pretty = process.stdout.isTTY && process.env.NODE_ENV !== 'production'): Logger {
   return pino({
     level,
     redact: { paths: REDACT, censor: '[redacted]' },

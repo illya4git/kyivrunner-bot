@@ -4,6 +4,7 @@ import { createLogger } from './core/logger.js';
 import { openDb } from './db/client.js';
 import { buildServices } from './services/index.js';
 import { startJobs } from './jobs.js';
+import { startHealthServer } from './core/health.js';
 import { createBot } from './bot/bot.js';
 
 async function main(): Promise<void> {
@@ -27,7 +28,25 @@ async function main(): Promise<void> {
     telegramTestEnv: config.telegramTestEnv,
     services,
   });
-  const jobs = startJobs(deps);
+  const jobs = startJobs(deps, { db, backupDir: config.backupDir, backupKeep: config.backupKeep });
+
+  // Healthy = polling Telegram, DB answering, tracker passes recent (it runs every
+  // poll interval even when idle; 10 min also covers the max outage backoff).
+  // Credential problems are reported but don't fail the check: a restart wouldn't fix them.
+  const health =
+    config.healthPort > 0
+      ? await startHealthServer(config.healthPort, () => {
+          db.$client.prepare('SELECT 1').get();
+          const last = services.tracker.lastPassAt;
+          const trackerOk = last !== null && Date.now() - last < 10 * 60_000;
+          return {
+            ok: bot.isRunning() && trackerOk,
+            polling: bot.isRunning(),
+            trackerLastPassSecAgo: last === null ? null : Math.round((Date.now() - last) / 1000),
+            credentials: services.credentials.health().state,
+          };
+        })
+      : null;
 
   let stopping = false;
   const shutdown = async (signal: string) => {
@@ -35,6 +54,7 @@ async function main(): Promise<void> {
     stopping = true;
     log.info({ signal }, 'shutting down');
     jobs.stop();
+    health?.close();
     await bot.stop().catch((err) => log.error({ err }, 'bot.stop failed'));
     db.$client.close();
     log.info('bye');

@@ -1,0 +1,25 @@
+# The production image against the mock Kyiv Digital API, in containers:
+#   docker compose -f compose.dev.yaml up --build
+# Uses .env for BOT_TOKEN / ADMIN_IDS / ENCRYPTION_KEY (use a separate dev bot).
+# Mock panel: http://127.0.0.1:8787/ — dev credentials can be copied from there.
+# Note: here the mock and the bot are separate processes, so /dev clock moves only the bot;
+# for a shared clock use `npm run dev:mock` instead.
+services:
+  mock:
+    build: { context: ., target: mock }
+    ports:
+      - "127.0.0.1:8787:8787"
+
+  bot:
+    build: { context: ., target: runtime }
+    env_file: .env
+    environment:
+      KYIV_BASE_URL: http://mock:8787
+      DEV_MODE: "true"
+      DB_PATH: /data/bot.sqlite
+    volumes:
+      - bot-dev-data:/data
+    depends_on: [mock]
+
+volumes:
+  bot-dev-data:

@@ -33,6 +33,8 @@ export class TicketTracker extends EventEmitter<TrackerEvents> {
   private backoffMs = 0;
   private readonly seenForeign = new Set<number>();
   private failures = 0;
+  /** End of the last pass (ms, real time) — the liveness heartbeat for /healthz. */
+  lastPassAt: number | null = null;
   private degraded = false;
 
   constructor(
@@ -61,6 +63,7 @@ export class TicketTracker extends EventEmitter<TrackerEvents> {
   tick(): Promise<void> {
     this.running ??= this.pass().finally(() => {
       this.running = null;
+      this.lastPassAt = Date.now();
     });
     return this.running;
   }

@@ -1,3 +1,4 @@
+import { dirname, join } from 'node:path';
 import { z } from 'zod';
 
 const PROD_KYIV_URL = 'https://kyiv.digital';
@@ -32,6 +33,11 @@ const EnvSchema = z
     /** Use Telegram's separate test environment (needs a bot registered there). */
     TELEGRAM_TEST_ENV: z.stringbool().default(false),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+    /** Directory for nightly backups; default: `backups/` next to the database. */
+    BACKUP_DIR: z.string().optional(),
+    BACKUP_KEEP: z.coerce.number().int().min(1).max(365).default(14),
+    /** Local port for GET /healthz (container healthcheck); 0 disables it. */
+    HEALTH_PORT: z.coerce.number().int().min(0).max(65535).default(8080),
   })
   .refine((c) => c.DEV_MODE || c.KYIV_BASE_URL === PROD_KYIV_URL, {
     message: `KYIV_BASE_URL other than ${PROD_KYIV_URL} requires DEV_MODE=true`,
@@ -46,6 +52,9 @@ export type Config = {
   kyivBaseUrl: string;
   devMode: boolean;
   telegramTestEnv: boolean;
+  backupDir: string;
+  backupKeep: number;
+  healthPort: number;
   logLevel: z.infer<typeof EnvSchema>['LOG_LEVEL'];
 };
 
@@ -64,6 +73,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     kyivBaseUrl: e.KYIV_BASE_URL,
     devMode: e.DEV_MODE,
     telegramTestEnv: e.TELEGRAM_TEST_ENV,
+    backupDir: e.BACKUP_DIR ?? join(dirname(e.DB_PATH), 'backups'),
+    backupKeep: e.BACKUP_KEEP,
+    healthPort: e.HEALTH_PORT,
     logLevel: e.LOG_LEVEL,
   };
 }
