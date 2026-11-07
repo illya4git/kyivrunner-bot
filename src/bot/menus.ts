@@ -28,7 +28,7 @@ export const MENUS: Record<Exclude<Role, 'banned'>, CommandName[]> = {
 
 /** Commands that exist but are only listed in /help (they take arguments). */
 export const HELP_EXTRAS: Partial<Record<Role, CommandName[]>> = {
-  admin: ['grant', 'revoke', 'quota', 'set'],
+  admin: ['grant', 'revoke', 'quota', 'set', 'cancel'],
 };
 
 /** Every command an admin may run — used to answer "admins only" instead of "unknown". */

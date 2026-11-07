@@ -2,9 +2,8 @@ import { loadConfig } from './core/config.js';
 import { OffsetClock } from './core/clock.js';
 import { createLogger } from './core/logger.js';
 import { openDb } from './db/client.js';
-import { AccessService } from './services/access.js';
-import { AuditService } from './services/audit.js';
-import { SettingsService } from './services/settings.js';
+import { buildServices } from './services/index.js';
+import { startJobs } from './jobs.js';
 import { createBot } from './bot/bot.js';
 
 async function main(): Promise<void> {
@@ -13,23 +12,29 @@ async function main(): Promise<void> {
   const clock = new OffsetClock();
 
   const db = openDb(config.dbPath);
-  const settings = new SettingsService(db, clock);
-  const audit = new AuditService(db, clock);
-  const access = new AccessService(db, clock, audit, settings, config.adminIds);
-  access.ensureBootstrapAdmins();
+  const services = buildServices({
+    db,
+    clock,
+    log,
+    adminIds: config.adminIds,
+    encryptionKey: config.encryptionKey,
+    kyivBaseUrl: config.kyivBaseUrl,
+  });
 
   const { bot, deps } = createBot({
     token: config.botToken,
     devMode: config.devMode,
     telegramTestEnv: config.telegramTestEnv,
-    services: { clock, log, access, audit, settings },
+    services,
   });
+  const jobs = startJobs(deps);
 
   let stopping = false;
   const shutdown = async (signal: string) => {
     if (stopping) return;
     stopping = true;
     log.info({ signal }, 'shutting down');
+    jobs.stop();
     await bot.stop().catch((err) => log.error({ err }, 'bot.stop failed'));
     db.$client.close();
     log.info('bye');
@@ -41,7 +46,7 @@ async function main(): Promise<void> {
   await bot.init();
   log.info({ bot: bot.botInfo.username, devMode: config.devMode, telegramTestEnv: config.telegramTestEnv, kyiv: config.kyivBaseUrl }, 'starting');
   void deps.menus
-    .syncAll(access.byRoles(['user', 'admin']))
+    .syncAll(services.access.byRoles(['user', 'admin']))
     .catch((err) => log.warn({ err }, 'command menu sync failed'));
 
   await bot.start({

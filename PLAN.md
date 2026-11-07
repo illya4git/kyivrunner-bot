@@ -48,7 +48,7 @@ API reference: [docs/](docs/README.md). Status: **design agreed in principle, no
 | Concern | Choice | Why |
 |---|---|---|
 | Runtime | **Node 24 LTS**, TypeScript (strict), ESM | Native `fetch`, already on the host. |
-| Telegram | **grammY** + `auto-retry` + `transformer-throttler` + `conversations` | TS-first. Conversations handle the credential-entry flow. |
+| Telegram | **grammY** + `auto-retry` + `transformer-throttler` | TS-first. The two-step credential entry is a small in-memory state machine. The conversations plugin rebuilds the context on every step, which loses `ctx.user`/`ctx.t`. |
 | DB | **SQLite** via `better-sqlite3`, WAL mode | One file, synchronous, fast. Prebuilt binaries exist for linux-arm64 and x64. |
 | Schema / queries | **Drizzle ORM** + `drizzle-kit` SQL migrations | Typed, little overhead. Migrations are committed and applied on startup. |
 | Validation | **zod** | Env, admin input, and **every Kyiv response** (fail loudly if the API shape drifts). |

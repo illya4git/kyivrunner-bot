@@ -41,6 +41,7 @@ export const uk = {
     export: 'Експорт CSV',
     card: 'Картка і баланс',
     credentials: 'Облікові дані Київ Цифровий',
+    cancel: 'Скасувати введення облікових даних',
     pause: 'Призупинити видачу',
     resume: 'Відновити видачу',
   },
@@ -126,6 +127,106 @@ export const uk = {
     refuseUnchanged: 'Роль не змінилась.',
     badQuota: 'Квота має бути цілим числом від 0 до 100 або «default».',
     badRole: 'Роль має бути user або admin.',
+  },
+
+  kyivError: {
+    no_credentials: '🔑 Облікові дані Київ Цифровий не налаштовані. Адміністратор: /credentials',
+    unauthorized: '⛔ Київ Цифровий відхилив токен.',
+    rate_limited: '⏳ Київ Цифровий просить зачекати. Спробуйте за хвилину.',
+    unavailable: '📡 Київ Цифровий зараз недоступний. Спробуйте пізніше.',
+    shape: '🧩 Київ Цифровий повернув неочікувані дані. Адміністраторам варто перевірити журнал.',
+    rejected: (msg: string | undefined) => `⛔ Київ Цифровий відхилив запит${msg ? `: ${esc(msg)}` : '.'}`,
+  },
+
+  creds: {
+    states: {
+      missing: '⚪️ не налаштовані',
+      ok: '✅ працюють',
+      expiring: '🟡 скоро спливають',
+      expired: '🔴 спливли',
+      invalid: '🔴 відхилені Київ Цифровим',
+    },
+    view: (p: {
+      state: string;
+      token?: string | undefined;
+      device?: string | undefined;
+      subject?: string | null | undefined;
+      expires?: string | undefined;
+      added?: string | undefined;
+      addedBy?: string | undefined;
+      lastOk?: string | undefined;
+      lastError?: string | undefined;
+    }) =>
+      `<b>🔑 Облікові дані Київ Цифровий</b>\n` +
+      `Стан: ${p.state}\n` +
+      (p.token ? `Токен: <code>${esc(p.token)}</code>\n` : '') +
+      (p.device ? `Пристрій: <code>${esc(p.device)}</code>\n` : '') +
+      (p.subject ? `Акаунт: <code>${esc(p.subject)}</code>\n` : '') +
+      (p.expires ? `Дійсний до: ${esc(p.expires)}\n` : '') +
+      (p.added ? `Додано: ${esc(p.added)}${p.addedBy ? ` (${p.addedBy})` : ''}\n` : '') +
+      (p.lastOk ? `Остання успішна відповідь: ${esc(p.lastOk)}\n` : '') +
+      (p.lastError ? `Остання помилка: ${esc(p.lastError)}\n` : ''),
+    btnSet: '🔑 Ввести нові',
+    btnCheck: '🔍 Перевірити',
+    btnClear: '🗑 Видалити',
+    btnClearConfirm: '🗑 Так, видалити',
+    btnCancel: 'Скасувати',
+    clearConfirm: 'Видалити облікові дані? Бот не зможе видавати квитки, доки їх не введуть знову.',
+    cleared: '🗑 Облікові дані видалено.',
+    askToken:
+      '🔑 Надішліть <b>access token</b> (JWT, починається з <code>eyJ</code>).\n' +
+      'Я видалю повідомлення одразу після прочитання. /cancel — скасувати.',
+    askDevice: (exp: string) =>
+      `✅ Токен прийнято (дійсний до ${esc(exp)}).\n` +
+      `Тепер надішліть <b>device UUID</b> з того самого встановлення застосунку.`,
+    tokenNoExp: 'дата невідома',
+    badToken: '⚠️ Це не схоже на JWT-токен. Надішліть токен ще раз або /cancel.',
+    expiredToken: '⚠️ Термін дії цього токена вже минув. Надішліть інший або /cancel.',
+    badDevice: '⚠️ Це не схоже на UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). Спробуйте ще раз або /cancel.',
+    probing: '⏳ Перевіряю в Київ Цифровий…',
+    probeUnauthorized: '⛔ Київ Цифровий відхилив цю пару токен + UUID. Переконайтеся, що обидва взято з одного встановлення. Почніть знову: /credentials',
+    probeFailed: (err: string) => `⚠️ Не вдалося перевірити: ${err}\nНадішліть UUID ще раз, щоб повторити, або /cancel.`,
+    saved: (n: number) => `✅ Облікові дані збережено. Карток в акаунті: ${n}.`,
+    noCards: '⚠️ В акаунті немає транспортних карток — видавати квитки не буде з чого.',
+    cancelled: 'Скасовано.',
+    timedOut: '⌛ Введення облікових даних скасовано через бездіяльність.',
+    checkOk: '✅ Облікові дані працюють.',
+    tokenDeleted: '🧹 Схоже на токен — я видалив повідомлення. Щоб змінити облікові дані, адміністратор використовує /credentials.',
+  },
+
+  card: {
+    pickPrompt: 'Оберіть картку, з якої видавати квитки:',
+    picked: (name: string) => `✅ Активна картка: ${esc(name)}`,
+    notSelected: '⚠️ Картку не обрано.',
+    notFound: '⚠️ Обраної картки більше немає в акаунті. Оберіть іншу.',
+    btnRefresh: '🔄 Оновити',
+    btnChange: '🔁 Змінити картку',
+    view: (p: {
+      name: string;
+      number: string;
+      trips: number;
+      validTo?: string | undefined;
+      activeCodes: number;
+      canGenerate: boolean;
+      creds: string;
+      tokenExp?: string | undefined;
+      rate?: string | undefined;
+    }) =>
+      `<b>💳 ${esc(p.name)}</b> · <code>${esc(p.number)}</code>\n` +
+      `Поїздок залишилось: <b>${p.trips}</b>${p.validTo ? ` (до ${esc(p.validTo)})` : ''}\n` +
+      `Активних QR-квитків: ${p.activeCodes}\n` +
+      `Генерація: ${p.canGenerate ? '✅ доступна' : '⛔ недоступна'}\n` +
+      `Облікові дані: ${p.creds}${p.tokenExp ? `, до ${esc(p.tokenExp)}` : ''}` +
+      (p.rate ? `\nЛіміт API: ${esc(p.rate)}` : ''),
+  },
+
+  alerts: {
+    credentialsInvalid: (reason: string) =>
+      `🚨 <b>Київ Цифровий відхилив токен.</b> Видачу квитків зупинено.\nПричина: ${esc(reason)}\nВведіть нові облікові дані: /credentials`,
+    credentialsRestored: '✅ Облікові дані знову працюють.',
+    credentialsExpiring: (days: number, date: string) =>
+      `⏰ Токен Київ Цифровий спливає через ${days} дн. (${esc(date)}). Оновіть його: /credentials`,
+    credentialsExpired: '🔴 Термін дії токена Київ Цифровий минув. Видачу квитків зупинено. /credentials',
   },
 };
 

@@ -9,13 +9,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "mock": "tsx mock/main.ts"
+    "mock": "tsx mock/main.ts",
+    "dev:mock": "tsx watch --env-file-if-exists=.env mock/dev.ts"
   },
   "type": "module",
   "private": true,
   "dependencies": {
     "@grammyjs/auto-retry": "^2.0.2",
-    "@grammyjs/conversations": "^2.1.1",
     "@grammyjs/transformer-throttler": "^1.2.1",
     "better-sqlite3": "^13.0.3",
     "croner": "^11.0.0",

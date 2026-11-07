@@ -62,3 +62,8 @@ export function kyivDateTime(ms: number): string {
   const parts = Object.fromEntries(dateTimeFmt.formatToParts(ms).map((p) => [p.type, p.value]));
   return `${parts.day}.${parts.month}.${parts.year} ${parts.hour}:${parts.minute}`;
 }
+
+/** 'DD.MM.YYYY' Kyiv date. */
+export function kyivDate(ms: number): string {
+  return kyivDateTime(ms).slice(0, 10);
+}

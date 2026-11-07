@@ -39,6 +39,7 @@ export const en: Messages = {
     export: 'CSV export',
     card: 'Card and balance',
     credentials: 'Kyiv Digital credentials',
+    cancel: 'Cancel credential entry',
     pause: 'Pause issuing',
     resume: 'Resume issuing',
   },
@@ -114,5 +115,83 @@ export const en: Messages = {
     refuseUnchanged: 'Role unchanged.',
     badQuota: 'Quota must be an integer from 0 to 100, or “default”.',
     badRole: 'Role must be user or admin.',
+  },
+
+  kyivError: {
+    no_credentials: '🔑 Kyiv Digital credentials are not set up. Admin: /credentials',
+    unauthorized: '⛔ Kyiv Digital rejected the token.',
+    rate_limited: '⏳ Kyiv Digital asks to slow down. Try again in a minute.',
+    unavailable: '📡 Kyiv Digital is unavailable right now. Try again later.',
+    shape: '🧩 Kyiv Digital returned unexpected data. Admins should check the log.',
+    rejected: (msg) => `⛔ Kyiv Digital refused the request${msg ? `: ${esc(msg)}` : '.'}`,
+  },
+
+  creds: {
+    states: {
+      missing: '⚪️ not set',
+      ok: '✅ working',
+      expiring: '🟡 expiring soon',
+      expired: '🔴 expired',
+      invalid: '🔴 rejected by Kyiv Digital',
+    },
+    view: (p) =>
+      `<b>🔑 Kyiv Digital credentials</b>\n` +
+      `State: ${p.state}\n` +
+      (p.token ? `Token: <code>${esc(p.token)}</code>\n` : '') +
+      (p.device ? `Device: <code>${esc(p.device)}</code>\n` : '') +
+      (p.subject ? `Account: <code>${esc(p.subject)}</code>\n` : '') +
+      (p.expires ? `Valid until: ${esc(p.expires)}\n` : '') +
+      (p.added ? `Added: ${esc(p.added)}${p.addedBy ? ` (${p.addedBy})` : ''}\n` : '') +
+      (p.lastOk ? `Last successful response: ${esc(p.lastOk)}\n` : '') +
+      (p.lastError ? `Last error: ${esc(p.lastError)}\n` : ''),
+    btnSet: '🔑 Enter new',
+    btnCheck: '🔍 Check',
+    btnClear: '🗑 Remove',
+    btnClearConfirm: '🗑 Yes, remove',
+    btnCancel: 'Cancel',
+    clearConfirm: 'Remove the credentials? The bot cannot issue tickets until they are entered again.',
+    cleared: '🗑 Credentials removed.',
+    askToken:
+      '🔑 Send the <b>access token</b> (a JWT starting with <code>eyJ</code>).\n' +
+      'I will delete the message right after reading it. /cancel to abort.',
+    askDevice: (exp) =>
+      `✅ Token accepted (valid until ${esc(exp)}).\n` + `Now send the <b>device UUID</b> from the same app install.`,
+    tokenNoExp: 'unknown date',
+    badToken: '⚠️ That does not look like a JWT. Send the token again, or /cancel.',
+    expiredToken: '⚠️ This token has already expired. Send another one, or /cancel.',
+    badDevice: '⚠️ That does not look like a UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). Try again, or /cancel.',
+    probing: '⏳ Checking with Kyiv Digital…',
+    probeUnauthorized: '⛔ Kyiv Digital rejected this token + UUID pair. Make sure both come from the same app install. Start over: /credentials',
+    probeFailed: (err) => `⚠️ Could not verify: ${err}\nSend the UUID again to retry, or /cancel.`,
+    saved: (n) => `✅ Credentials saved. Cards on the account: ${n}.`,
+    noCards: '⚠️ The account has no travel cards — there is nothing to issue tickets from.',
+    cancelled: 'Cancelled.',
+    timedOut: '⌛ Credential entry cancelled due to inactivity.',
+    checkOk: '✅ The credentials work.',
+    tokenDeleted: '🧹 That looked like a token, so I deleted the message. Admins change credentials with /credentials.',
+  },
+
+  card: {
+    pickPrompt: 'Choose the card to issue tickets from:',
+    picked: (name) => `✅ Active card: ${esc(name)}`,
+    notSelected: '⚠️ No card selected.',
+    notFound: '⚠️ The selected card is no longer on the account. Choose another one.',
+    btnRefresh: '🔄 Refresh',
+    btnChange: '🔁 Change card',
+    view: (p) =>
+      `<b>💳 ${esc(p.name)}</b> · <code>${esc(p.number)}</code>\n` +
+      `Trips left: <b>${p.trips}</b>${p.validTo ? ` (until ${esc(p.validTo)})` : ''}\n` +
+      `Active QR tickets: ${p.activeCodes}\n` +
+      `Generation: ${p.canGenerate ? '✅ available' : '⛔ unavailable'}\n` +
+      `Credentials: ${p.creds}${p.tokenExp ? `, until ${esc(p.tokenExp)}` : ''}` +
+      (p.rate ? `\nAPI limit: ${esc(p.rate)}` : ''),
+  },
+
+  alerts: {
+    credentialsInvalid: (reason) =>
+      `🚨 <b>Kyiv Digital rejected the token.</b> Ticket issuing is stopped.\nReason: ${esc(reason)}\nEnter new credentials: /credentials`,
+    credentialsRestored: '✅ The credentials work again.',
+    credentialsExpiring: (days, date) => `⏰ The Kyiv Digital token expires in ${days} day(s) (${esc(date)}). Renew it: /credentials`,
+    credentialsExpired: '🔴 The Kyiv Digital token has expired. Ticket issuing is stopped. /credentials',
   },
 };

@@ -1,4 +1,5 @@
 import type { MiddlewareFn } from 'grammy';
+import { redactJwts } from '../../core/crypto.js';
 import { messages } from '../../i18n/index.js';
 import type { BotContext } from '../context.js';
 import type { BotDeps } from '../deps.js';
@@ -48,7 +49,7 @@ function describeUpdate(ctx: BotContext, chatType: string | undefined): Record<s
   if (ctx.callbackQuery) return { ...base, type: 'callback', data: ctx.callbackQuery.data ?? null };
   const msg = ctx.message;
   if (msg?.text !== undefined) {
-    if (msg.text.startsWith('/')) return { ...base, type: 'command', text: msg.text.slice(0, MAX_LOGGED_ARGS) };
+    if (msg.text.startsWith('/')) return { ...base, type: 'command', text: redactJwts(msg.text).slice(0, MAX_LOGGED_ARGS) };
     return { ...base, type: 'text', len: msg.text.length };
   }
   if (msg) return { ...base, type: 'message', kinds: Object.keys(msg).filter((k) => !STANDARD_MSG_KEYS.has(k)) };

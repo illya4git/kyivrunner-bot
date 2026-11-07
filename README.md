@@ -24,7 +24,13 @@ npm run typecheck
 npm run mock              # http://127.0.0.1:8787, prints stable dev credentials
 ```
 
-Run the bot against it with `KYIV_BASE_URL=http://127.0.0.1:8787` and `DEV_MODE=true`.
+Or run the mock and the bot together in one process (uses `.env` for everything else):
+
+```bash
+npm run dev:mock          # prints the dev token and device UUID to enter via /credentials set
+```
+
+To run the bot against a separately started mock, set `KYIV_BASE_URL=http://127.0.0.1:8787` and `DEV_MODE=true`.
 The mock checks the request envelope strictly, keeps the account's state in memory, and has a
 control plane at `/_mock/`:
 
@@ -54,5 +60,11 @@ Migrations are applied automatically on startup.
   user management (`/users`, `/requests`, `/grant`, `/revoke`, `/quota`).
 - Phase 2: the mock Kyiv Digital API and `KyivClient` (envelope, rate limiting, retries, error
   mapping, response validation), with contract tests against the mock.
+- Phase 3: `/credentials` (two-step entry, encrypted at rest, health tracking, expiry warnings,
+  admin alerts) and `/card` (live balance and card selection). Messages that look like a token
+  are deleted wherever they appear, and redacted from the audit log.
+
+`npm audit` reports a moderate advisory in the esbuild copy bundled with `drizzle-kit`. It's a
+dev-only tool that never runs esbuild's dev server, and it isn't shipped in the production image.
 
 Ticket commands reply with "not ready yet" until their phases land.

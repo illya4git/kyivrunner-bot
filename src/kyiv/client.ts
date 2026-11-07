@@ -26,6 +26,11 @@ export type KyivClientOptions = {
   timeoutMs?: number;
   /** Retries for idempotent GETs on 5xx / network errors. */
   getRetries?: number;
+  /**
+   * Called after each request made with the stored credentials (not one-off ones):
+   * lets the credential service track health (401 → invalid, success → last OK).
+   */
+  onStoredCredentialsResult?: (result: { ok: true } | { ok: false; error: KyivError }) => void;
 };
 
 export type RateLimitInfo = { limit: number | null; remaining: number | null; at: number };
@@ -101,6 +106,18 @@ export class KyivClient {
   // --- transport ---------------------------------------------------------------
 
   private async request<S extends z.ZodType>(req: RequestOpts<S>): Promise<z.output<S>> {
+    const report = req.credentials ? undefined : this.opts.onStoredCredentialsResult;
+    try {
+      const result = await this.requestWithRetries(req);
+      report?.({ ok: true });
+      return result;
+    } catch (err) {
+      if (err instanceof KyivError && err.kind !== 'no_credentials') report?.({ ok: false, error: err });
+      throw err;
+    }
+  }
+
+  private async requestWithRetries<S extends z.ZodType>(req: RequestOpts<S>): Promise<z.output<S>> {
     const isGet = req.method === 'GET';
     const maxAttempts = isGet ? 1 + (this.opts.getRetries ?? 2) : 1;
     let rateLimitedOnce = false;

@@ -11,6 +11,9 @@ import { publicCommands } from './commands/public.js';
 import { adminUserCommands } from './commands/admin-users.js';
 import { ADMIN_PLACEHOLDERS, USER_PLACEHOLDERS, placeholders } from './commands/placeholders.js';
 import { fallback } from './commands/fallback.js';
+import { credentialFlows } from './commands/admin-credentials.js';
+import { adminCardCommands } from './commands/admin-card.js';
+import { wireAlerts } from './alerts.js';
 
 export type CreateBotOptions = {
   token: string;
@@ -59,7 +62,10 @@ export function createBot(opts: CreateBotOptions): { bot: Bot<BotContext>; deps:
     devMode: opts.devMode,
   };
 
+  const creds = credentialFlows(deps);
   bot.use(coreMiddleware(deps));
+  bot.use(creds.credentialEntry); // must see an admin's secret messages before anything else
+  bot.use(creds.jwtGuard);
   bot.use(publicCommands(deps));
 
   const members = bot.filter((ctx) => ctx.user.role === 'user' || ctx.user.role === 'admin');
@@ -67,9 +73,12 @@ export function createBot(opts: CreateBotOptions): { bot: Bot<BotContext>; deps:
 
   const admins = bot.filter((ctx) => ctx.user.role === 'admin');
   admins.use(adminUserCommands(deps));
+  admins.use(creds.commands);
+  admins.use(adminCardCommands(deps));
   admins.use(placeholders(ADMIN_PLACEHOLDERS));
 
   bot.use(fallback(deps));
+  wireAlerts(deps);
 
   bot.catch(async (err) => {
     opts.services.log.error({ err: err.error, update: err.ctx.update.update_id }, 'unhandled error in update');

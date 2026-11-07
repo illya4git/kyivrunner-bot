@@ -1,9 +1,7 @@
 import type { Clock } from '../../src/core/clock.js';
 import { silentLogger } from '../../src/core/logger.js';
 import { openDb } from '../../src/db/client.js';
-import { AccessService } from '../../src/services/access.js';
-import { AuditService } from '../../src/services/audit.js';
-import { SettingsService } from '../../src/services/settings.js';
+import { buildServices } from '../../src/services/index.js';
 
 /** A controllable clock for tests. Starts at 2026-11-07 10:00 Kyiv (08:00 UTC). */
 export class FakeClock implements Clock {
@@ -17,13 +15,23 @@ export class FakeClock implements Clock {
 }
 
 export const ADMIN_ID = 1000;
+export const TEST_KEY = Buffer.alloc(32, 7);
 
-export function makeServices(opts: { adminIds?: number[] } = {}) {
-  const clock = new FakeClock();
+/**
+ * The real service graph over an in-memory DB. `kyivUrl` defaults to an address nothing
+ * listens on, so tests that don't start the mock fail fast if they touch the API.
+ */
+export function makeServices(opts: { adminIds?: number[]; kyivUrl?: string; clock?: FakeClock } = {}) {
+  const clock = opts.clock ?? new FakeClock();
   const db = openDb(':memory:');
-  const settings = new SettingsService(db, clock);
-  const audit = new AuditService(db, clock);
-  const access = new AccessService(db, clock, audit, settings, opts.adminIds ?? [ADMIN_ID]);
-  access.ensureBootstrapAdmins();
-  return { clock, db, settings, audit, access, log: silentLogger };
+  const services = buildServices({
+    db,
+    clock,
+    log: silentLogger,
+    adminIds: opts.adminIds ?? [ADMIN_ID],
+    encryptionKey: TEST_KEY,
+    kyivBaseUrl: opts.kyivUrl ?? 'http://127.0.0.1:9',
+    kyivClient: { sleep: async () => undefined, getRetries: 0 },
+  });
+  return { ...services, clock, db };
 }
