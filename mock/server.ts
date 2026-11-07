@@ -1,7 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { KD_CLIENT_AUTH } from '../src/kyiv/envelope.js';
+import { STATIONS } from './fixtures.js';
 import { MockError, MockState } from './state.js';
+
+const PANEL_PATH = new URL('./panel.html', import.meta.url);
 
 /**
  * timeout: hang without processing; drop: close the connection without processing;
@@ -131,12 +135,13 @@ export class MockKyivServer {
     const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
     const defaultCard = () => s.cards[0]?.id ?? 0;
 
-    this.route('GET', /^\/_mock\/?$/, () => ({
+    this.route('GET', /^\/_mock\/endpoints$/, () => ({
       endpoints: this.routes.filter((r) => r.re.source.includes('_mock')).map((r) => `${r.method} ${r.re.source}`),
     }));
     this.route('GET', /^\/_mock\/state$/, () => ({
       now: s.nowSec(),
       clock_offset_sec: s.clockOffsetSec,
+      stations: STATIONS,
       cards: s.cards.map((c) => s.cardView(c.id)),
       codes: s.codeList(),
       feed: Object.fromEntries(s.cards.map((c) => [c.id, s.feed(c.id, 1, 100)])),
@@ -258,6 +263,8 @@ export class MockKyivServer {
     const method = req.method ?? 'GET';
     const path = url.pathname;
     const log = (status: RequestLogEntry['status'], note?: string) => {
+      // Only the real-API surface is logged; the panel polls /_mock/* constantly.
+      if (!path.startsWith('/api/')) return;
       this.requests.push({ at: started, method, path: path + url.search, status, ms: Date.now() - started, ...(note ? { note } : {}) });
       if (this.requests.length > 500) this.requests.splice(0, this.requests.length - 500);
     };
@@ -266,6 +273,16 @@ export class MockKyivServer {
       res.end(JSON.stringify(body));
       log(status, note);
     };
+
+    // The control panel (re-read on every request, so edits show up without a restart).
+    if (method === 'GET' && (path === '/' || path === '/_mock' || path === '/_mock/')) {
+      if (path !== '/_mock/') {
+        res.writeHead(302, { location: '/_mock/' });
+        return void res.end();
+      }
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      return void res.end(readFileSync(PANEL_PATH));
+    }
 
     try {
       const rawBody = await readBody(req);

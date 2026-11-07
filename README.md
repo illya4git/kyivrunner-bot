@@ -31,8 +31,12 @@ npm run dev:mock          # own DB (data/mock.sqlite); prints the dev token and 
 ```
 
 To run the bot against a separately started mock, set `KYIV_BASE_URL=http://127.0.0.1:8787` and `DEV_MODE=true`.
-The mock checks the request envelope strictly, keeps the account's state in memory, and has a
-control plane at `/_mock/`:
+The mock checks the request envelope strictly and keeps the account's state in memory.
+
+**Control panel:** open http://127.0.0.1:8787/ in a browser. It covers the card (trips, blocked
+flags), QR codes (scan at a chosen station, with optional feed delay, or expire), the feed,
+tokens (copy the dev credentials, issue, revoke), fault injection and latency, the mock clock,
+and a live log of API requests. Everything in it is also available as JSON:
 
 | Endpoint | Effect |
 |---|---|

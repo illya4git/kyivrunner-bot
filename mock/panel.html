@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kyiv Digital Mock</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --fg: #1d2330; --muted: #6b7280; --line: #e3e6eb;
+    --accent: #0b6bcb; --ok: #1f8a3b; --warn: #b7791f; --bad: #c0392b; --chip: #eef1f5;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b2028; --fg: #e6e9ef; --muted: #9aa3b2; --line: #2b323d;
+      --accent: #5aa2f0; --ok: #4cc26b; --warn: #e0a84a; --bad: #ef6b5b; --chip: #252c37;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header {
+    position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 16px; margin: 0 8px 0 0; }
+  .clock { font-family: var(--mono); font-size: 15px; }
+  .clock small { color: var(--muted); }
+  main { display: grid; gap: 14px; padding: 14px 16px 40px; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); max-width: 1500px; margin: 0 auto; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+  section.wide { grid-column: 1 / -1; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  button, input, select {
+    font: inherit; color: inherit; background: var(--chip); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px;
+  }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger:hover { border-color: var(--bad); color: var(--bad); }
+  input[type=number] { width: 72px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+  .muted { color: var(--muted); }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-weight: 600; color: var(--muted); font-size: 12px; }
+  .scroll { max-height: 360px; overflow: auto; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; background: var(--chip); }
+  .pill.active { color: var(--accent); } .pill.used { color: var(--ok); } .pill.expired { color: var(--muted); }
+  .pill.bad { color: var(--bad); } .pill.warn { color: var(--warn); }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+  .card .trips { font-size: 22px; font-weight: 700; margin-right: 4px; }
+  .s2 { color: var(--ok); } .s4 { color: var(--warn); } .s5 { color: var(--bad); }
+  #toast { position: fixed; right: 16px; bottom: 16px; max-width: 420px; padding: 10px 14px; border-radius: 8px; background: var(--fg); color: var(--bg); opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.show { opacity: .95; }
+  #toast.err { background: var(--bad); color: #fff; }
+  .hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🚇 Kyiv Digital Mock</h1>
+  <span class="clock" id="clock">—</span>
+  <span class="row" style="margin:0">
+    <button data-advance="600">+10 min</button>
+    <button data-advance="3600">+1 h</button>
+    <button id="midnight">→ Midnight</button>
+    <button id="clockReset">Clock = now</button>
+  </span>
+  <span style="flex:1"></span>
+  <label class="muted"><input type="checkbox" id="auto" checked> auto-refresh</label>
+  <button id="refresh">Refresh</button>
+  <button class="danger" id="reset">Reset all</button>
+</header>
+
+<main>
+  <section>
+    <h2>Cards <button id="addCard">+ Add card</button></h2>
+    <div id="cards"></div>
+    <div class="row">
+      <button id="ownerGen">📱 Owner generates a QR</button>
+      <button id="tap">💳 Physical card tap</button>
+    </div>
+    <p class="hint">The tap and the scans below use the station selected in “QR codes”.</p>
+  </section>
+
+  <section>
+    <h2>QR codes</h2>
+    <div class="row">
+      <label>Station <select id="station"></select></label>
+      <input id="place" placeholder="custom place (optional)" style="flex:1;min-width:140px">
+      <label title="Seconds until the validation shows up in the feed">feed delay <input type="number" id="delay" value="0" min="0"></label>
+    </div>
+    <div class="scroll"><table>
+      <thead><tr><th>id</th><th>code</th><th>status</th><th>expires</th><th>used</th><th></th></tr></thead>
+      <tbody id="codes"></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Feed <span class="muted" id="feedCard"></span></h2>
+    <div class="scroll"><table><tbody id="feed"></tbody></table></div>
+  </section>
+
+  <section>
+    <h2>Tokens</h2>
+    <div id="devToken"></div>
+    <div class="scroll"><table>
+      <thead><tr><th>token</th><th>sub</th><th>device</th><th>expires</th><th></th></tr></thead>
+      <tbody id="tokens"></tbody>
+    </table></div>
+    <div class="row">
+      <label>new token, expires in <input type="number" id="expDays" value="186" step="0.5"> days</label>
+      <input id="newDevice" placeholder="device uuid (random if empty)" style="flex:1;min-width:160px">
+      <button id="issue">Issue</button>
+      <button class="danger" id="revokeAll">Revoke all</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Faults &amp; latency <button class="danger" id="clearFaults">Clear faults</button></h2>
+    <div class="row">
+      <select id="fKind">
+        <option value="503">503 unavailable</option>
+        <option value="500">500 server error</option>
+        <option value="401">401 unauthorized</option>
+        <option value="423">423 challenge</option>
+        <option value="429">429 rate limited</option>
+        <option value="shape">malformed body</option>
+        <option value="timeout">timeout (hang)</option>
+        <option value="drop">drop (not processed)</option>
+        <option value="lost">lost (processed, no response)</option>
+      </select>
+      <label>count <input type="number" id="fCount" value="1" min="1"></label>
+      <label title="Probability per request; leave empty for 'always'">rate <input type="number" id="fRate" step="0.1" min="0" max="1" placeholder="1"></label>
+      <select id="fMethod"><option value="">any method</option><option>GET</option><option>POST</option></select>
+      <input id="fPath" placeholder="path contains… (e.g. /qr-ticket)" style="flex:1;min-width:150px">
+      <button class="primary" id="addFault">Add</button>
+    </div>
+    <div id="faults" class="muted">No active faults.</div>
+    <div class="row">
+      <label>Latency <input type="number" id="latency" min="0" step="100"> ms</label>
+      <button id="setLatency">Set</button>
+    </div>
+  </section>
+
+  <section class="wide">
+    <h2>API requests <span class="muted">newest first · control-plane calls are not logged</span></h2>
+    <div class="scroll"><table>
+      <thead><tr><th>time</th><th>method</th><th>path</th><th>status</th><th>ms</th><th>note</th></tr></thead>
+      <tbody id="requests"></tbody>
+    </table></div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const fmt = new Intl.DateTimeFormat('uk-UA', { timeZone: 'Europe/Kyiv', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const fmtShort = new Intl.DateTimeFormat('uk-UA', { timeZone: 'Europe/Kyiv', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const t = (sec) => (sec ? fmt.format(sec * 1000) : '—');
+const ts = (sec) => (sec ? fmtShort.format(sec * 1000) : '—');
+let state = null;
+
+function toast(msg, err = false) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = 'show' + (err ? ' err' : '');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (el.className = ''), err ? 5000 : 2200);
+}
+
+async function api(method, path, body) {
+  const res = await fetch(path, { method, headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+  return data;
+}
+
+/** Run an action, report it, and refresh. */
+async function act(label, fn) {
+  try {
+    const r = await fn();
+    toast(typeof label === 'function' ? label(r) : label);
+  } catch (e) {
+    toast(e.message, true);
+  }
+  await load(true);
+}
+
+/** Don't clobber a container the user is typing in. */
+function put(id, html, force) {
+  const el = $(id);
+  if (!force && el.contains(document.activeElement) && document.activeElement !== document.body) return;
+  el.innerHTML = html;
+}
+
+function codeStatus(c) {
+  if (c.used_at) return 'used';
+  return c.expire_at <= state.now ? 'expired' : 'active';
+}
+
+function stationPayload() {
+  const [mode, place] = ($('station').value || '').split('|');
+  const custom = $('place').value.trim();
+  const p = {};
+  if (mode) p.mode = mode;
+  if (custom) p.place = custom;
+  else if (place) p.place = place;
+  return p;
+}
+
+function render(force) {
+  const s = state;
+  const offset = s.clock_offset_sec;
+  $('clock').innerHTML = `${esc(t(s.now))} <small>Kyiv${offset ? ` · offset ${offset > 0 ? '+' : ''}${(offset / 3600).toFixed(2)} h` : ''}</small>`;
+
+  // stations (once)
+  if (!$('station').options.length) {
+    $('station').innerHTML = '<option value="">🎲 random</option>' + s.stations.map((st) => `<option value="${esc(st.mode)}|${esc(st.place)}">${esc(st.mode)} · ${esc(st.place)}</option>`).join('');
+  }
+
+  put('cards', s.cards.map((c) => `
+    <div class="card">
+      <div class="row" style="margin:0 0 4px">
+        <b>💳 ${esc(c.name)}</b> <span class="muted mono">#${c.id} · ${esc(c.code)}</span>
+        ${c.qr_generate_blocked ? '<span class="pill bad">blocked</span>' : ''}
+        ${c.locked_at ? '<span class="pill bad">locked</span>' : ''}
+        ${!c.actions.generate_qr ? '<span class="pill warn">generate_qr off</span>' : ''}
+      </div>
+      <div class="row">
+        <span class="trips">${c.monthly_tickets_balance}</span><span class="muted">trips · ${c.qrs_count} active QR</span>
+        <button data-trips="${c.id}" data-delta="-1">−1</button>
+        <button data-trips="${c.id}" data-delta="1">+1</button>
+        <input type="number" min="0" id="trips-${c.id}" placeholder="set">
+        <button data-settrips="${c.id}">Set</button>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" data-flag="blocked" data-card="${c.id}" ${c.qr_generate_blocked ? 'checked' : ''}> blocked</label>
+        <label><input type="checkbox" data-flag="generate_qr" data-card="${c.id}" ${c.actions.generate_qr ? 'checked' : ''}> generate_qr</label>
+        <label><input type="checkbox" data-flag="locked" data-card="${c.id}" ${c.locked_at ? 'checked' : ''}> locked</label>
+      </div>
+    </div>`).join(''), force);
+
+  put('codes', s.codes.length ? s.codes.map((c) => {
+    const st = codeStatus(c);
+    return `<tr>
+      <td class="mono">${c.id}</td>
+      <td class="mono">${esc(c.code)}</td>
+      <td><span class="pill ${st}">${st}</span></td>
+      <td>${esc(ts(c.expire_at))}</td>
+      <td>${esc(ts(c.used_at))}</td>
+      <td style="white-space:nowrap">${st === 'active' ? `<button class="primary" data-scan="${c.id}">Scan</button> <button data-expire="${c.id}">Expire</button>` : ''}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" class="muted">No codes yet. Ask the bot for /qr.</td></tr>', force);
+
+  const card = s.cards[0];
+  $('feedCard').textContent = card ? `#${card.id}` : '';
+  const icons = { 1: '🚇', 2: '💰', 3: '🎫', 4: '↩️' };
+  const feed = card ? s.feed[card.id] || [] : [];
+  put('feed', feed.length ? feed.slice(0, 40).map((e) => `<tr class="s${e.type}">
+      <td>${icons[e.type] || '•'}</td><td>${esc(e.title)}${e.description ? ` <span class="muted">— ${esc(e.description)}</span>` : ''}</td>
+      <td class="mono">${esc(ts(e.created_at))}</td><td class="mono muted">${esc(e.id)}</td></tr>`).join('')
+    : '<tr><td class="muted">Empty.</td></tr>', force);
+
+  const dev = s.tokens.find((x) => x.deviceUuid === '00000000-0000-4000-8000-000000000de1') || s.tokens[0];
+  put('devToken', dev ? `<div class="row">
+      <span>Dev credentials:</span>
+      <button data-copy="${esc(dev.token)}">Copy token</button>
+      <button data-copy="${esc(dev.deviceUuid)}">Copy device UUID</button>
+      <span class="muted mono">${esc(dev.deviceUuid)}</span></div>` : '', force);
+
+  put('tokens', s.tokens.map((x) => {
+    const expired = x.exp <= s.now;
+    const status = x.revoked ? '<span class="pill bad">revoked</span>' : expired ? '<span class="pill warn">expired</span>' : '';
+    return `<tr>
+      <td class="mono">${esc(x.token.slice(0, 10))}…${esc(x.token.slice(-6))} ${status}</td>
+      <td class="mono">${esc(x.sub)}</td>
+      <td class="mono">${esc(x.deviceUuid.slice(0, 8))}…</td>
+      <td>${esc(ts(x.exp))}</td>
+      <td style="white-space:nowrap"><button data-copy="${esc(x.token)}">Copy</button> <button data-copy="${esc(x.deviceUuid)}">UUID</button>
+        ${x.revoked ? '' : `<button class="danger" data-revoke="${esc(x.token)}">Revoke</button>`}</td></tr>`;
+  }).join(''), force);
+
+  put('faults', s.faults.length ? s.faults.map((f) => `<div class="row"><span class="pill bad">${esc(f.kind)}</span>
+      <span class="muted">${f.remaining !== undefined ? `${f.remaining} left` : 'unlimited'}${f.rate !== undefined ? ` · rate ${f.rate}` : ''}${f.method ? ` · ${f.method}` : ''}${f.path ? ` · path ~ ${esc(f.path)}` : ''}</span></div>`).join('')
+    : 'No active faults.', force);
+  if (document.activeElement !== $('latency')) $('latency').value = s.latency_ms;
+}
+
+function renderRequests(reqs, force) {
+  put('requests', reqs.length ? reqs.slice(0, 60).map((r) => {
+    const cls = typeof r.status === 'number' ? (r.status < 300 ? 'used' : r.status < 500 ? 'warn' : 'bad') : 'bad';
+    return `<tr><td class="mono">${esc(fmt.format(r.at))}</td><td class="mono">${esc(r.method)}</td><td class="mono">${esc(r.path)}</td>
+      <td><span class="pill ${cls}">${esc(r.status)}</span></td><td class="mono">${r.ms}</td><td class="muted">${esc(r.note || '')}</td></tr>`;
+  }).join('') : '<tr><td colspan="6" class="muted">No API requests yet.</td></tr>', force);
+}
+
+async function load(force = false) {
+  try {
+    const [s, reqs] = await Promise.all([api('GET', '/_mock/state'), api('GET', '/_mock/requests')]);
+    state = s;
+    render(force);
+    renderRequests(reqs, force);
+  } catch (e) {
+    $('clock').textContent = 'mock unreachable';
+  }
+}
+
+// --- actions --------------------------------------------------------------------
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest('button');
+  if (!b) return;
+  const d = b.dataset;
+  if (d.advance) return act(`Clock +${d.advance / 60} min`, () => api('POST', '/_mock/clock', { advance_sec: Number(d.advance) }));
+  if (d.trips) {
+    const card = state.cards.find((c) => c.id === Number(d.trips));
+    return act('Trips updated', () => api('PATCH', `/_mock/cards/${d.trips}`, { trips: Math.max(0, card.monthly_tickets_balance + Number(d.delta)) }));
+  }
+  if (d.settrips) {
+    const v = $(`trips-${d.settrips}`).value;
+    if (v === '') return toast('Enter a number first', true);
+    return act('Trips set', () => api('PATCH', `/_mock/cards/${d.settrips}`, { trips: Number(v) }));
+  }
+  if (d.scan) {
+    const body = { ...stationPayload(), feed_delay_sec: Number($('delay').value) || 0 };
+    return act((r) => `Scanned #${d.scan} — ${r.event.title}, ${r.event.description}`, () => api('POST', `/_mock/codes/${d.scan}/validate`, body));
+  }
+  if (d.expire) return act(`Code #${d.expire} expired, trip returned`, () => api('POST', `/_mock/codes/${d.expire}/expire`));
+  if (d.revoke) return act('Token revoked', () => api('POST', '/_mock/tokens/revoke', { token: d.revoke }));
+  if (d.copy) {
+    navigator.clipboard.writeText(d.copy).then(() => toast('Copied'), () => toast('Clipboard unavailable — select manually', true));
+  }
+});
+
+document.addEventListener('change', (ev) => {
+  const el = ev.target;
+  if (el.dataset.flag) act(`${el.dataset.flag} = ${el.checked}`, () => api('PATCH', `/_mock/cards/${el.dataset.card}`, { [el.dataset.flag]: el.checked }));
+});
+
+$('midnight').onclick = () => act('Jumped past Kyiv midnight', () => api('POST', '/_mock/midnight'));
+$('clockReset').onclick = () => act('Clock back to real time', () => api('POST', '/_mock/clock', { offset_sec: 0 }));
+$('reset').onclick = () => confirm('Reset cards, codes, feed, tokens and faults?') && act('Mock reset', () => api('POST', '/_mock/reset'));
+$('refresh').onclick = () => load(true);
+$('ownerGen').onclick = () => act((r) => `Owner generated #${r.id}`, () => api('POST', '/_mock/owner-generate', {}));
+$('tap').onclick = () => act((r) => `Card tap — ${r.title}, ${r.description}`, () => api('POST', '/_mock/foreign-validation', stationPayload()));
+$('addCard').onclick = () => act((r) => `Added card #${r.id}`, () => api('POST', '/_mock/cards', {}));
+$('issue').onclick = () => {
+  const body = { exp_in_days: Number($('expDays').value) };
+  if ($('newDevice').value.trim()) body.device_uuid = $('newDevice').value.trim();
+  act((r) => `Issued token for device ${r.deviceUuid.slice(0, 8)}…`, () => api('POST', '/_mock/tokens', body));
+};
+$('revokeAll').onclick = () => act('All tokens revoked', () => api('POST', '/_mock/tokens/revoke', { all: true }));
+$('addFault').onclick = () => {
+  const body = { kind: $('fKind').value, count: Number($('fCount').value) || 1 };
+  if ($('fRate').value !== '') body.rate = Number($('fRate').value);
+  if ($('fMethod').value) body.method = $('fMethod').value;
+  if ($('fPath').value.trim()) body.path = $('fPath').value.trim();
+  act(`Fault ${body.kind} armed`, () => api('POST', '/_mock/faults', body));
+};
+$('clearFaults').onclick = () => act('Faults cleared', () => api('DELETE', '/_mock/faults'));
+$('setLatency').onclick = () => act('Latency set', () => api('POST', '/_mock/latency', { ms: Number($('latency').value) || 0 }));
+
+load(true);
+setInterval(() => $('auto').checked && load(), 2000);
+</script>
+</body>
+</html>

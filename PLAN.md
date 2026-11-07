@@ -330,7 +330,7 @@ Dockerfile  compose.yaml  compose.dev.yaml  .env.example  README.md
 3. **Credentials + card:** `/credentials` conversation, encryption, health, `/card`.
 4. **Tickets:** TicketService + TicketView (`/qr`, quotas, safeguards, mutex, reply-to / re-send).
 5. **Tracking:** tracker, PlaceResolver, message edits, midnight sweep, startup reconciliation.
-6. **Admin reporting:** `/stats` `/logs` `/export` `/settings` `/pause`, alerts. Mock control **panel**.
+6. **Admin reporting:** `/stats` `/logs` `/export` `/settings` `/pause`, alerts. (The mock control panel was moved earlier and shipped after phase 4.)
 7. **Ship:** Dockerfile (multi-arch), compose files, backups, healthcheck, README/runbook.
 8. **Live smoke test** against the real API with your token (read-only first, then one real generate).
 
