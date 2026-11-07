@@ -73,3 +73,25 @@ export function kyivDateTime(ms: number): string {
 export function kyivDate(ms: number): string {
   return kyivDateTime(ms).slice(0, 10);
 }
+
+/** The Kyiv day `n` days before `day` ('YYYY-MM-DD'). */
+export function kyivDayMinus(day: string, n: number): string {
+  const [y, m, d] = day.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d - n, 12)).toISOString().slice(0, 10);
+}
+
+/** 'YYYY-MM-DD HH:MM:SS' Kyiv time — sortable, for exports. */
+export function kyivIso(ms: number): string {
+  const p = Object.fromEntries(isoFmt.formatToParts(ms).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
+}
+const isoFmt = new Intl.DateTimeFormat('en-GB', {
+  timeZone: KYIV_TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+});

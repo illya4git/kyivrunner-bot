@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import type { Logger } from '../core/logger.js';
 import { isKyivError } from '../kyiv/errors.js';
 import type { AuditService } from './audit.js';
@@ -6,6 +7,15 @@ import type { SettingsService } from './settings.js';
 import type { TicketService } from './tickets.js';
 
 const MAX_BACKOFF_MS = 5 * 60_000;
+/** Consecutive failed passes (≈12 min with backoff) before admins hear about it. */
+export const DEGRADED_AFTER = 5;
+
+export type TrackerEvents = {
+  /** Kyiv Digital has failed DEGRADED_AFTER passes in a row (not counting a rejected token). */
+  degraded: [{ kind: string }];
+  /** First successful pass after `degraded`. */
+  recovered: [];
+};
 
 /**
  * Background loop that keeps tickets in sync without user action. Each pass:
@@ -16,12 +26,14 @@ const MAX_BACKOFF_MS = 5 * 60_000;
  * Idle passes cost nothing: no API call is made unless something is active or pending.
  * The first pass runs at start, which reconciles anything that changed while the bot was down.
  */
-export class TicketTracker {
+export class TicketTracker extends EventEmitter<TrackerEvents> {
   private timer: NodeJS.Timeout | null = null;
   private stopped = true;
   private running: Promise<void> | null = null;
   private backoffMs = 0;
   private readonly seenForeign = new Set<number>();
+  private failures = 0;
+  private degraded = false;
 
   constructor(
     private readonly tickets: TicketService,
@@ -29,7 +41,9 @@ export class TicketTracker {
     private readonly settings: SettingsService,
     private readonly audit: AuditService,
     private readonly log: Logger,
-  ) {}
+  ) {
+    super();
+  }
 
   start(): void {
     if (!this.stopped) return;
@@ -67,10 +81,20 @@ export class TicketTracker {
       if (codes) this.noteForeignCodes(codes.map((c) => ({ id: c.id, card: c.card_id })));
       await this.tickets.resolvePendingPlaces();
       this.backoffMs = 0;
+      this.failures = 0;
+      if (this.degraded) {
+        this.degraded = false;
+        this.emit('recovered');
+      }
     } catch (err) {
       if (!isKyivError(err)) {
         this.log.error({ err }, 'tracker pass failed');
         return;
+      }
+      // A rejected token has its own alert (credentials); don't double up.
+      if (err.kind !== 'unauthorized' && ++this.failures >= DEGRADED_AFTER && !this.degraded) {
+        this.degraded = true;
+        this.emit('degraded', { kind: err.kind });
       }
       this.backoffMs = Math.min(MAX_BACKOFF_MS, Math.max(30_000, this.backoffMs * 2));
       this.log.warn({ kind: err.kind, backoffMs: this.backoffMs }, 'tracker: Kyiv Digital call failed, backing off');

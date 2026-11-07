@@ -10,6 +10,7 @@ import { SettingsService } from './settings.js';
 import { TicketService } from './tickets.js';
 import { PlaceResolver } from './places.js';
 import { TicketTracker } from './tracker.js';
+import { StatsService } from './stats.js';
 
 export type ServiceConfig = {
   db: Db;
@@ -45,6 +46,8 @@ export function buildServices(c: ServiceConfig): Services {
   const tickets = new TicketService(c.db, c.clock, audit, settings, access, credentials, kyiv, places, c.log.child({ mod: 'tickets' }));
   const tracker = new TicketTracker(tickets, credentials, settings, audit, c.log.child({ mod: 'tracker' }));
 
+  const stats = new StatsService(c.db, c.clock);
+
   access.ensureBootstrapAdmins();
-  return { clock: c.clock, log: c.log, settings, audit, access, credentials, kyiv, tickets, tracker };
+  return { clock: c.clock, log: c.log, settings, audit, access, credentials, kyiv, tickets, tracker, stats };
 }

@@ -9,7 +9,6 @@ export const en: Messages = {
     noAccess: '🔒 You have no access. Send /request to ask for it.',
     adminOnly: '🔒 This command is for administrators only.',
     unknownCommand: 'Unknown command. See /help',
-    notImplemented: '🚧 This feature is not ready yet.',
     usage: (u) => `Usage: <code>${esc(u)}</code>`,
     userNotFound: (ref) => `User <code>${esc(ref)}</code> not found. They must message the bot first, or use their numeric ID.`,
     back: '« Back',
@@ -102,6 +101,8 @@ export const en: Messages = {
       `Created: ${esc(p.created)}\n` +
       `Last seen: ${esc(p.lastSeen)}` +
       (p.pending ? '\n📨 Access request pending' : ''),
+    btnStats: '📊 Stats',
+    btnLogs: '📜 Log',
     btnQuota: '🎚 Quota…',
     btnPrev: '‹',
     btnNext: '›',
@@ -229,7 +230,72 @@ export const en: Messages = {
     historyExpired: (date) => `⌛ ${esc(date)} — not used`,
   },
 
+  settings: {
+    header: '<b>⚙️ Settings</b>',
+    footer: 'Change: <code>/set key value</code>',
+    line: (key, value, isDefault, desc) => `<code>${esc(key)}</code> = <b>${esc(value)}</b>${isDefault ? ' · default' : ''}\n<i>${esc(desc)}</i>`,
+    desc: {
+      default_daily_quota: 'Tickets per user per day',
+      global_daily_cap: 'Tickets per day for everyone combined',
+      reserve_trips: 'Stop issuing when the card has this many trips or fewer',
+      low_balance_alert: 'Warn admins when this many trips or fewer are left',
+      active_card_id: 'Active card (change it with /card)',
+      poll_interval_sec: 'How often active tickets are checked, seconds',
+      place_match_window_sec: 'Max time difference when finding the place, seconds',
+      api_rate_per_min: 'Kyiv Digital requests per minute',
+      request_cooldown_hours: 'Wait before another /request after an ignore, hours',
+      log_retention_days: 'How many days the event log is kept',
+      paused: 'Issuing paused (/pause, /resume)',
+    },
+    unknownKey: (key) => `Unknown key <code>${esc(key)}</code>. See /settings`,
+    internalKey: (key) => `<code>${esc(key)}</code> is changed elsewhere (see /settings).`,
+    invalid: (key, err) => `⚠️ Invalid value for <code>${esc(key)}</code>: ${esc(err)}`,
+    changed: (key, from, to) => `✅ <code>${esc(key)}</code>: ${esc(from)} → <b>${esc(to)}</b>`,
+  },
+
+  pause: {
+    paused: '⏸ Ticket issuing is paused. Active tickets keep working. /resume to continue.',
+    resumed: '▶️ Ticket issuing resumed.',
+    alreadyPaused: 'Issuing is already paused.',
+    notPaused: 'Issuing is not paused.',
+    noticePaused: (by) => `⏸ ${by} paused ticket issuing.`,
+    noticeResumed: (by) => `▶️ ${by} resumed ticket issuing.`,
+  },
+
+  stats: {
+    periods: { today: 'today', week: '7 days', month: '30 days', all: 'all time' },
+    header: (period) => `<b>📊 Statistics — ${esc(period)}</b>`,
+    userLine: (name, p) => `• ${name}: ${p.issued} 🎫 · ${p.used} ✅ · ${p.expired} ⌛${p.active ? ` · ${p.active} active` : ''}`,
+    total: (p) => `<b>Total:</b> ${p.issued} 🎫 · ${p.used} ✅ · ${p.expired} ⌛${p.active ? ` · ${p.active} active` : ''}`,
+    empty: 'No tickets in this period.',
+    placesHeader: '<b>Top places</b>',
+    placeLine: (place, n) => `• ${esc(place)} — ${n}`,
+    card: (trips) => `💳 Trips on the card: <b>${trips}</b>`,
+    cardUnavailable: '💳 Card balance is unavailable right now.',
+    legend: '🎫 issued · ✅ used · ⌛ expired',
+    usage: 'Usage: /stats [today|week|month|all]',
+    userHeader: (name) => `<b>📊 ${name} — 30 days</b>`,
+    recentHeader: '<b>Recent tickets</b>',
+  },
+
+  logs: {
+    header: (n, who) => `<b>📜 Log</b> — last ${n}${who ? ` · ${who}` : ' (interactions hidden)'}`,
+    empty: 'No events.',
+    usage: 'Usage: /logs [id|@user] [count]',
+  },
+
+  export: {
+    usage: 'Usage: /export [tickets|events] [days]',
+    caption: (what, days, n) => `📤 ${esc(what)} · ${esc(days)} · rows: ${n}`,
+    allTime: 'all time',
+    days: (n) => `${n} days`,
+  },
+
   alerts: {
+    lowBalance: (trips) => `🪫 Only <b>${trips}</b> trips left on the card.`,
+    generationBlocked: '⛔ The card does not allow QR tickets (blocked, or generation is off). /card',
+    apiDegraded: (kind) => `📡 Kyiv Digital has not been responding for several minutes (${esc(kind)}). Ticket statuses will update once it is back.`,
+    apiRecovered: '✅ Kyiv Digital is reachable again.',
     credentialsInvalid: (reason) =>
       `🚨 <b>Kyiv Digital rejected the token.</b> Ticket issuing is stopped.\nReason: ${esc(reason)}\nEnter new credentials: /credentials`,
     credentialsRestored: '✅ The credentials work again.',

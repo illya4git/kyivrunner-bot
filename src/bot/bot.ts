@@ -9,7 +9,7 @@ import { CommandMenus } from './menus.js';
 import { Notifier } from './notifier.js';
 import { publicCommands } from './commands/public.js';
 import { adminUserCommands } from './commands/admin-users.js';
-import { ADMIN_PLACEHOLDERS, placeholders } from './commands/placeholders.js';
+import { adminReportCommands } from './commands/admin-reports.js';
 import { fallback } from './commands/fallback.js';
 import { credentialFlows } from './commands/admin-credentials.js';
 import { adminCardCommands } from './commands/admin-card.js';
@@ -80,8 +80,8 @@ export function createBot(opts: CreateBotOptions): { bot: Bot<BotContext>; deps:
   admins.use(adminUserCommands(deps));
   admins.use(creds.commands);
   admins.use(adminCardCommands(deps));
+  admins.use(adminReportCommands(deps));
   if (opts.devMode) admins.use(devCommands(deps));
-  admins.use(placeholders(ADMIN_PLACEHOLDERS));
 
   bot.use(fallback(deps));
   wireAlerts(deps);

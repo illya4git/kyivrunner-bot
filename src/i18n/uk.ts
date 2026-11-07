@@ -10,7 +10,6 @@ export const uk = {
     noAccess: '🔒 У вас немає доступу. Надішліть /request, щоб попросити його.',
     adminOnly: '🔒 Ця команда доступна лише адміністраторам.',
     unknownCommand: 'Невідома команда. Список команд: /help',
-    notImplemented: '🚧 Ця функція ще в розробці.',
     usage: (u: string) => `Використання: <code>${esc(u)}</code>`,
     userNotFound: (ref: string) => `Користувача <code>${esc(ref)}</code> не знайдено. Людина має спершу написати боту, або вкажіть числовий ID.`,
     back: '« Назад',
@@ -114,6 +113,8 @@ export const uk = {
       `Створено: ${esc(p.created)}\n` +
       `Востаннє: ${esc(p.lastSeen)}` +
       (p.pending ? '\n📨 Очікує на доступ' : ''),
+    btnStats: '📊 Статистика',
+    btnLogs: '📜 Журнал',
     btnQuota: '🎚 Квота…',
     btnPrev: '‹',
     btnNext: '›',
@@ -264,7 +265,75 @@ export const uk = {
     historyExpired: (date: string) => `⌛ ${esc(date)} — не використано`,
   },
 
+  settings: {
+    header: '<b>⚙️ Налаштування</b>',
+    footer: 'Змінити: <code>/set ключ значення</code>',
+    line: (key: string, value: string, isDefault: boolean, desc: string) =>
+      `<code>${esc(key)}</code> = <b>${esc(value)}</b>${isDefault ? ' · типово' : ''}\n<i>${esc(desc)}</i>`,
+    desc: {
+      default_daily_quota: 'Квитків на користувача на день',
+      global_daily_cap: 'Квитків на день для всіх разом',
+      reserve_trips: 'Не видавати квитки, якщо на картці стільки поїздок або менше',
+      low_balance_alert: 'Попереджати адмінів, коли поїздок залишилося стільки або менше',
+      active_card_id: 'Активна картка (змінюється через /card)',
+      poll_interval_sec: 'Як часто перевіряти активні квитки, секунд',
+      place_match_window_sec: 'Макс. розбіжність часу при визначенні місця, секунд',
+      api_rate_per_min: 'Ліміт запитів до Київ Цифровий за хвилину',
+      request_cooldown_hours: 'Пауза перед повторним /request після ігнорування, годин',
+      log_retention_days: 'Скільки днів зберігати журнал подій',
+      paused: 'Видачу призупинено (/pause, /resume)',
+    },
+    unknownKey: (key: string) => `Невідомий ключ <code>${esc(key)}</code>. Список: /settings`,
+    internalKey: (key: string) => `<code>${esc(key)}</code> змінюється окремо (див. /settings).`,
+    invalid: (key: string, err: string) => `⚠️ Неприпустиме значення для <code>${esc(key)}</code>: ${esc(err)}`,
+    changed: (key: string, from: string, to: string) => `✅ <code>${esc(key)}</code>: ${esc(from)} → <b>${esc(to)}</b>`,
+  },
+
+  pause: {
+    paused: '⏸ Видачу квитків призупинено. Активні квитки працюють як і раніше. /resume — відновити.',
+    resumed: '▶️ Видачу квитків відновлено.',
+    alreadyPaused: 'Видачу вже призупинено.',
+    notPaused: 'Видача не призупинена.',
+    noticePaused: (by: string) => `⏸ ${by} призупинив(-ла) видачу квитків.`,
+    noticeResumed: (by: string) => `▶️ ${by} відновив(-ла) видачу квитків.`,
+  },
+
+  stats: {
+    periods: { today: 'сьогодні', week: '7 днів', month: '30 днів', all: 'весь час' },
+    header: (period: string) => `<b>📊 Статистика — ${esc(period)}</b>`,
+    userLine: (name: string, p: { issued: number; used: number; expired: number; active: number }) =>
+      `• ${name}: ${p.issued} 🎫 · ${p.used} ✅ · ${p.expired} ⌛${p.active ? ` · ${p.active} активн.` : ''}`,
+    total: (p: { issued: number; used: number; expired: number; active: number }) =>
+      `<b>Разом:</b> ${p.issued} 🎫 · ${p.used} ✅ · ${p.expired} ⌛${p.active ? ` · ${p.active} активн.` : ''}`,
+    empty: 'За цей період квитків не було.',
+    placesHeader: '<b>Найчастіші місця</b>',
+    placeLine: (place: string, n: number) => `• ${esc(place)} — ${n}`,
+    card: (trips: number) => `💳 Поїздок на картці: <b>${trips}</b>`,
+    cardUnavailable: '💳 Баланс картки зараз недоступний.',
+    legend: '🎫 видано · ✅ використано · ⌛ сплило',
+    usage: 'Використання: /stats [today|week|month|all]',
+    userHeader: (name: string) => `<b>📊 ${name} — 30 днів</b>`,
+    recentHeader: '<b>Останні квитки</b>',
+  },
+
+  logs: {
+    header: (n: number, who?: string) => `<b>📜 Журнал</b> — останні ${n}${who ? ` · ${who}` : ' (без взаємодій)'}`,
+    empty: 'Подій немає.',
+    usage: 'Використання: /logs [id|@user] [кількість]',
+  },
+
+  export: {
+    usage: 'Використання: /export [tickets|events] [днів]',
+    caption: (what: string, days: string, n: number) => `📤 ${esc(what)} · ${esc(days)} · рядків: ${n}`,
+    allTime: 'весь час',
+    days: (n: number) => `${n} дн.`,
+  },
+
   alerts: {
+    lowBalance: (trips: number) => `🪫 На картці залишилося <b>${trips}</b> поїздок.`,
+    generationBlocked: '⛔ Картка не дозволяє створювати QR-квитки (заблокована або вимкнено генерацію). /card',
+    apiDegraded: (kind: string) => `📡 Київ Цифровий не відповідає вже кілька хвилин (${esc(kind)}). Статуси квитків оновляться, щойно зв’язок відновиться.`,
+    apiRecovered: '✅ Зв’язок із Київ Цифровий відновлено.',
     credentialsInvalid: (reason: string) =>
       `🚨 <b>Київ Цифровий відхилив токен.</b> Видачу квитків зупинено.\nПричина: ${esc(reason)}\nВведіть нові облікові дані: /credentials`,
     credentialsRestored: '✅ Облікові дані знову працюють.',

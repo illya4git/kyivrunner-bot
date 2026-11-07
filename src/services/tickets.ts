@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { and, count, desc, eq, gt, inArray, isNull, lt, lte } from 'drizzle-orm';
 import { kyivDay, type Clock } from '../core/clock.js';
 import type { Logger } from '../core/logger.js';
@@ -52,7 +53,14 @@ const NOOP_PRESENTER: TicketPresenter = {
  *    of codes taken right before generating — robust to concurrent use of the phone app;
  *  - a generate whose response was lost is reconciled from the code list instead of retried.
  */
-export class TicketService {
+export type TicketEvents = {
+  /** Trips left on the card after an issue are at or below `low_balance_alert`. */
+  lowBalance: [{ trips: number }];
+  /** The card refuses QR generation (blocked / locked / generate_qr off). */
+  generationBlocked: [];
+};
+
+export class TicketService extends EventEmitter<TicketEvents> {
   private readonly mutex = new Mutex();
   private presenter: TicketPresenter = NOOP_PRESENTER;
 
@@ -66,7 +74,9 @@ export class TicketService {
     private readonly kyiv: KyivClient,
     private readonly places: PlaceResolver,
     private readonly log: Logger,
-  ) {}
+  ) {
+    super();
+  }
 
   setPresenter(p: TicketPresenter): void {
     this.presenter = p;
@@ -207,7 +217,10 @@ export class TicketService {
     }
 
     const card = await this.kyiv.getCard(cardId);
-    if (!canGenerate(card)) return deny('card_blocked');
+    if (!canGenerate(card)) {
+      this.emit('generationBlocked');
+      return deny('card_blocked');
+    }
     const reserve = this.settings.get('reserve_trips');
     if (tripsLeft(card) <= reserve) {
       this.audit.log({ kind: 'cap_denied', tgId: user.tgId, role: user.role, data: { reason: 'reserve', trips: tripsLeft(card), reserve } });
@@ -233,6 +246,8 @@ export class TicketService {
       .returning()
       .get();
     this.audit.log({ kind: 'ticket_issued', tgId: user.tgId, role: user.role, data: { ticket: ticket.id, kd: code.id, card: code.card_id } });
+    const tripsAfter = tripsLeft(card) - 1;
+    if (tripsAfter <= this.settings.get('low_balance_alert')) this.emit('lowBalance', { trips: tripsAfter });
     return { kind: 'issued', ticket, quota: { used: quota.used + 1, limit: quota.limit } };
   }
 

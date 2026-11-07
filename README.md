@@ -86,5 +86,9 @@ Migrations are applied automatically on startup.
 `npm audit` reports a moderate advisory in the esbuild copy bundled with `drizzle-kit`. It's a
 dev-only tool that never runs esbuild's dev server, and it isn't shipped in the production image.
 
-Admin reporting commands (`/settings`, `/stats`, `/logs`, `/export`, `/pause`) reply with "not
-ready yet" until phase 6.
+- Phase 6: `/settings` and `/set`, `/pause` and `/resume`, `/stats [today|week|month|all]`,
+  `/logs [id|@user] [count]` (interactions hidden unless a user is given), `/export
+  [tickets|events] [days|all]` as CSV (no QR payloads), Stats/Log buttons on the user card.
+  Admin alerts for low balance and blocked generation (once per Kyiv day, survive restarts)
+  and for a sustained Kyiv Digital outage and its recovery. Audit events older than
+  `log_retention_days` are pruned nightly.

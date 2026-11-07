@@ -1,4 +1,4 @@
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, lt, notInArray } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { events, type EventRow, type Role } from '../db/schema.js';
 import type { Clock } from '../core/clock.js';
@@ -28,6 +28,8 @@ export const EVENT_KINDS = [
   'foreign_code',
   'paused',
   'resumed',
+  'admin_alert',
+  'exported',
 ] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
@@ -58,10 +60,11 @@ export class AuditService {
       .run();
   }
 
-  recent(opts: { tgId?: number; kind?: EventKind; limit?: number } = {}): EventRow[] {
+  recent(opts: { tgId?: number; kind?: EventKind; exclude?: EventKind[]; limit?: number } = {}): EventRow[] {
     const conds = [];
     if (opts.tgId !== undefined) conds.push(eq(events.tgId, opts.tgId));
     if (opts.kind !== undefined) conds.push(eq(events.kind, opts.kind));
+    if (opts.exclude?.length) conds.push(notInArray(events.kind, opts.exclude));
     return this.db
       .select()
       .from(events)
@@ -69,6 +72,22 @@ export class AuditService {
       .orderBy(desc(events.id))
       .limit(opts.limit ?? 20)
       .all();
+  }
+
+  /** Events since `sinceMs`, oldest first (exports). */
+  since(sinceMs: number): EventRow[] {
+    return this.db.select().from(events).where(gte(events.ts, sinceMs)).orderBy(asc(events.id)).all();
+  }
+
+  /**
+   * Record that an alert of `key` went out for `scope` (e.g. a Kyiv day); returns false if
+   * it already had. Survives restarts, so admins aren't re-alerted after a redeploy.
+   */
+  claimAlert(key: string, scope: string): boolean {
+    const seen = this.recent({ kind: 'admin_alert', limit: 200 }).some((e) => e.data?.key === key && e.data?.scope === scope);
+    if (seen) return false;
+    this.log({ kind: 'admin_alert', data: { key, scope } });
+    return true;
   }
 
   /** Delete events older than `days`. Returns the number of deleted rows. */

@@ -21,6 +21,7 @@ const ROLE_ICON: Record<Role, string> = { admin: '👑', user: '👤', guest: '�
  *   ur:<id>:<role>       set role
  *   uq:<id>              quota picker
  *   us:<id>:<n|d>        set quota (d = default)
+ *   ust:<id> / ulg:<id>  user stats / log (admin-reports.ts)
  *   rq:<g|b|i>:<id>      resolve access request (grant / ban / ignore)
  */
 export function adminUserCommands(deps: BotDeps): Composer<BotContext> {
@@ -61,6 +62,9 @@ export function adminUserCommands(deps: BotDeps): Composer<BotContext> {
       .text(roleBtn('banned'), `ur:${u.tgId}:banned`)
       .row()
       .text(t.admin.btnQuota, `uq:${u.tgId}`)
+      .row()
+      .text(t.admin.btnStats, `ust:${u.tgId}`)
+      .text(t.admin.btnLogs, `ulg:${u.tgId}`)
       .row()
       .text(t.common.back, 'ul:0');
     return { text, reply_markup: kb };
