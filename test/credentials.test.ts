@@ -4,6 +4,7 @@ import { silentLogger } from '../src/core/logger.js';
 import { openDb } from '../src/db/client.js';
 import { isKyivError } from '../src/kyiv/errors.js';
 import { buildServices } from '../src/services/index.js';
+import { MOCK_CLIENT_AUTH } from '../src/kyiv/envelope.js';
 import { MockKyivServer } from '../mock/server.js';
 import { PUPIL_CARD_ID, STUDENT_CARD_ID } from '../mock/fixtures.js';
 import { ADMIN_ID, FakeClock, TEST_KEY, makeServices } from './helpers/services.js';
@@ -109,7 +110,7 @@ describe('CredentialService', () => {
 
   it('reports undecryptable credentials after an ENCRYPTION_KEY change', async () => {
     const db = openDb(':memory:');
-    const base = { db, clock: new FakeClock(), log: silentLogger, adminIds: [ADMIN_ID], kyivBaseUrl: 'http://127.0.0.1:9' };
+    const base = { db, clock: new FakeClock(), log: silentLogger, adminIds: [ADMIN_ID], kyivBaseUrl: 'http://127.0.0.1:9', kyivClientAuth: MOCK_CLIENT_AUTH };
     const a = buildServices({ ...base, encryptionKey: TEST_KEY });
     a.credentials.save({ accessToken: 'eyJhbGciOi.eyJzdWIiOiIxIn0.c2ln', deviceUuid: crypto.randomUUID() }, ADMIN_ID);
     const b = buildServices({ ...base, encryptionKey: Buffer.alloc(32, 9) });

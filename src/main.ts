@@ -20,6 +20,7 @@ async function main(): Promise<void> {
     adminIds: config.adminIds,
     encryptionKey: config.encryptionKey,
     kyivBaseUrl: config.kyivBaseUrl,
+    kyivClientAuth: config.kyivClientAuth,
   });
 
   const { bot, deps } = createBot({

@@ -19,6 +19,7 @@ export type ServiceConfig = {
   adminIds: readonly number[];
   encryptionKey: Buffer;
   kyivBaseUrl: string;
+  kyivClientAuth: string;
   /** Test hooks for the HTTP client (sleep, timeouts). */
   kyivClient?: Partial<KyivClientOptions>;
 };
@@ -34,6 +35,7 @@ export function buildServices(c: ServiceConfig): Services {
   let credentials: CredentialService | undefined;
   const kyiv = new KyivClient({
     baseUrl: c.kyivBaseUrl,
+    clientAuth: c.kyivClientAuth,
     credentials: () => credentials?.usable() ?? null,
     ratePerMin: () => settings.get('api_rate_per_min'),
     log: c.log.child({ mod: 'kyiv' }),

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { KD_CLIENT_AUTH } from '../src/kyiv/envelope.js';
+import { MOCK_CLIENT_AUTH } from '../src/kyiv/envelope.js';
 import { STATIONS } from './fixtures.js';
 import { MockError, MockState } from './state.js';
 
@@ -64,7 +64,11 @@ export class MockKyivServer {
   private readonly routes: Route[] = [];
   private server: Server | null = null;
 
-  constructor(state = new MockState()) {
+  constructor(
+    state = new MockState(),
+    /** X-Client-Auth value the mock accepts (the bot uses the same placeholder in dev). */
+    private readonly clientAuth: string = MOCK_CLIENT_AUTH,
+  ) {
     this.state = state;
     this.apiRoutes();
     this.controlRoutes();
@@ -310,7 +314,7 @@ export class MockKyivServer {
       if (!isApi) return send(200, route.handler(ctx));
 
       // Real-API pipeline: envelope → auth → rate limit → faults → handler.
-      const problems = envelopeProblems(req, method, path, rawBody);
+      const problems = envelopeProblems(req, method, path, rawBody, this.clientAuth);
       if (problems.length) return send(400, { message: `mock: bad request envelope: ${problems.join('; ')}` }, {}, problems.join('; '));
 
       const token = String(req.headers.authorization).slice('Bearer '.length);
@@ -384,10 +388,10 @@ function header(req: IncomingMessage, name: string): string | undefined {
 }
 
 /** Strict checks that catch client bugs the real server might punish silently. */
-function envelopeProblems(req: IncomingMessage, method: string, path: string, rawBody: string): string[] {
+function envelopeProblems(req: IncomingMessage, method: string, path: string, rawBody: string, clientAuth: string): string[] {
   const p: string[] = [];
   const h = (n: string) => header(req, n);
-  if (h('x-client-auth') !== KD_CLIENT_AUTH) p.push('X-Client-Auth missing or wrong');
+  if (h('x-client-auth') !== clientAuth) p.push('X-Client-Auth missing or wrong');
   if (!h('accept')?.includes('application/json')) p.push('Accept must be application/json');
   if (!h('x-client-version')) p.push('X-Client-Version missing');
   if (h('x-client-platform') !== '0') p.push('X-Client-Platform must be 0');

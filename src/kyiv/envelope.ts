@@ -1,8 +1,13 @@
 /**
  * The header envelope the Kyiv Digital Android app sends on every request.
  * See docs/README.md#the-request-envelope-required-on-every-request
+ *
+ * `X-Client-Auth` is a static secret baked into the app. It is deliberately not in this
+ * repository: it comes from the KYIV_CLIENT_AUTH environment variable.
  */
-export const KD_CLIENT_AUTH = '<KYIV_CLIENT_AUTH>';
+
+/** Placeholder used with the mock API (dev and tests); the mock checks against it. */
+export const MOCK_CLIENT_AUTH = 'mock-client-auth-0000000000000000000000000000000000000000000000000';
 export const KD_APP_VERSION = '4.0.0';
 export const KD_PLATFORM = '0'; // Android
 export const KD_OS_VERSION = '11';
@@ -34,11 +39,15 @@ export function decodeJwtClaims(token: string): Record<string, unknown> | null {
  * Headers for one request. `json` = the request carries a JSON body.
  * Empty-body POSTs (generate QR) must NOT send Content-Type — matches the app.
  */
-export function envelopeHeaders(creds: KyivCredentials, opts: { json?: boolean; locale?: 'uk' | 'en' } = {}): Record<string, string> {
+export function envelopeHeaders(
+  creds: KyivCredentials,
+  clientAuth: string,
+  opts: { json?: boolean; locale?: 'uk' | 'en' } = {},
+): Record<string, string> {
   const h: Record<string, string> = {
     Authorization: `Bearer ${creds.accessToken}`,
     Accept: 'application/json',
-    'X-Client-Auth': KD_CLIENT_AUTH,
+    'X-Client-Auth': clientAuth,
     'X-Client-Version': KD_APP_VERSION,
     'X-Client-Platform': KD_PLATFORM,
     'X-Client-Locale': opts.locale ?? 'uk',

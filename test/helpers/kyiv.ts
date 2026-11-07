@@ -1,6 +1,6 @@
 import { silentLogger } from '../../src/core/logger.js';
 import { KyivClient, type KyivClientOptions } from '../../src/kyiv/client.js';
-import type { KyivCredentials } from '../../src/kyiv/envelope.js';
+import { MOCK_CLIENT_AUTH, type KyivCredentials } from '../../src/kyiv/envelope.js';
 import { MockKyivServer } from '../../mock/server.js';
 
 /**
@@ -16,6 +16,7 @@ export async function startMockKyiv(clientOpts: Partial<KyivClientOptions> = {})
 
   const client = new KyivClient({
     baseUrl: url,
+    clientAuth: MOCK_CLIENT_AUTH,
     credentials: () => creds,
     ratePerMin: () => 60,
     log: silentLogger,

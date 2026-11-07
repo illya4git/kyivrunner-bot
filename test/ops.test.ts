@@ -84,6 +84,7 @@ describe('ops config', () => {
       ADMIN_IDS: '1',
       ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
       DB_PATH: '/data/bot.sqlite',
+      KYIV_CLIENT_AUTH: 'ab'.repeat(32),
     });
     expect(c).toMatchObject({ backupDir: '/data/backups', backupKeep: 14, healthPort: 8080 });
   });

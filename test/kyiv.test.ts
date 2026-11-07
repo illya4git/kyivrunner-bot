@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { kyivDayEnd } from '../src/core/clock.js';
-import { decodeJwtClaims, envelopeHeaders, jwtSubject } from '../src/kyiv/envelope.js';
+import { MOCK_CLIENT_AUTH, decodeJwtClaims, envelopeHeaders, jwtSubject } from '../src/kyiv/envelope.js';
 import { isKyivError, type KyivError } from '../src/kyiv/errors.js';
 import { RateLimiter } from '../src/kyiv/rate-limit.js';
 import { FEED_EVENT_TYPE, canGenerate, isUsable, tripsLeft } from '../src/kyiv/schemas.js';
@@ -217,7 +217,7 @@ describe('KyivClient ↔ mock: failures and retries', () => {
 describe('mock envelope strictness', () => {
   it('rejects a generate that sends Content-Type or a body', async () => {
     const { url, state } = await start();
-    const headers = envelopeHeaders({ accessToken: state.devToken.token, deviceUuid: state.devToken.deviceUuid }, { json: true });
+    const headers = envelopeHeaders({ accessToken: state.devToken.token, deviceUuid: state.devToken.deviceUuid }, MOCK_CLIENT_AUTH, { json: true });
     const res = await fetch(`${url}/api/v4/card/travel/${STUDENT_CARD_ID}/qr-ticket`, { method: 'POST', headers, body: '{}' });
     expect(res.status).toBe(400);
     const { message } = (await res.json()) as { message: string };
@@ -227,7 +227,7 @@ describe('mock envelope strictness', () => {
 
   it('rejects a request without X-Client-Auth', async () => {
     const { url, state } = await start();
-    const headers = envelopeHeaders({ accessToken: state.devToken.token, deviceUuid: state.devToken.deviceUuid });
+    const headers = envelopeHeaders({ accessToken: state.devToken.token, deviceUuid: state.devToken.deviceUuid }, MOCK_CLIENT_AUTH);
     delete headers['X-Client-Auth'];
     expect((await fetch(`${url}/api/v4/qr`, { headers })).status).toBe(400);
   });
@@ -240,7 +240,7 @@ describe('envelope helpers', () => {
     expect(claims.sub).toBe(String(DEV_USER_ID));
     expect(claims.exp).toBe(state.devToken.exp);
     expect(jwtSubject('not-a-jwt')).toBe('me');
-    const h = envelopeHeaders({ accessToken: state.devToken.token, deviceUuid: 'u' });
+    const h = envelopeHeaders({ accessToken: state.devToken.token, deviceUuid: 'u' }, MOCK_CLIENT_AUTH);
     expect(h['User-Agent']).toBe(`KD/4.0.0 Android/11 User/${DEV_USER_ID}`);
     expect(h['Content-Type']).toBeUndefined();
   });

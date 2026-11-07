@@ -15,6 +15,8 @@ import {
 
 export type KyivClientOptions = {
   baseUrl: string;
+  /** Value of the app's static X-Client-Auth header (KYIV_CLIENT_AUTH). */
+  clientAuth: string;
   /** Current credentials, or null when none are configured. Read on every request. */
   credentials: () => KyivCredentials | null;
   /** Self-imposed requests per minute (shared with the owner's phone app on the server side). */
@@ -153,7 +155,7 @@ export class KyivClient {
     try {
       res = await this.fetchFn(this.opts.baseUrl + req.path, {
         method: req.method,
-        headers: envelopeHeaders(creds),
+        headers: envelopeHeaders(creds, this.opts.clientAuth),
         signal: AbortSignal.timeout(this.opts.timeoutMs ?? 15_000),
       });
     } catch (cause) {

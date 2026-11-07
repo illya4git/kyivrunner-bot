@@ -26,6 +26,8 @@ const dev = mock.state.devToken;
 
 process.env.KYIV_BASE_URL = url;
 process.env.DEV_MODE = 'true';
+// The mock accepts the placeholder; never send the real client secret to it.
+delete process.env.KYIV_CLIENT_AUTH;
 // Separate DB, so mock credentials and card choice never mix with real ones.
 process.env.DB_PATH = process.env.MOCK_DB_PATH ?? './data/mock.sqlite';
 
@@ -54,6 +56,7 @@ function resetBotState(): void {
     adminIds: config.adminIds,
     encryptionKey: config.encryptionKey,
     kyivBaseUrl: url,
+    kyivClientAuth: config.kyivClientAuth,
   });
   const by = config.adminIds[0]!;
   s.credentials.save({ accessToken: dev.token, deviceUuid: dev.deviceUuid }, by);

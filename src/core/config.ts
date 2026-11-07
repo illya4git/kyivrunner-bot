@@ -1,5 +1,6 @@
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
+import { MOCK_CLIENT_AUTH } from '../kyiv/envelope.js';
 
 const PROD_KYIV_URL = 'https://kyiv.digital';
 
@@ -30,6 +31,11 @@ const EnvSchema = z
     DB_PATH: z.string().default('./data/bot.sqlite'),
     KYIV_BASE_URL: z.url().default(PROD_KYIV_URL).transform((u) => u.replace(/\/+$/, '')),
     DEV_MODE: z.stringbool().default(false),
+    /** The Kyiv Digital app's static X-Client-Auth header (64 hex chars). Not in the repo. */
+    KYIV_CLIENT_AUTH: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/i, 'KYIV_CLIENT_AUTH must be 64 hex characters')
+      .optional(),
     /** Use Telegram's separate test environment (needs a bot registered there). */
     TELEGRAM_TEST_ENV: z.stringbool().default(false),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
@@ -42,6 +48,10 @@ const EnvSchema = z
   .refine((c) => c.DEV_MODE || c.KYIV_BASE_URL === PROD_KYIV_URL, {
     message: `KYIV_BASE_URL other than ${PROD_KYIV_URL} requires DEV_MODE=true`,
     path: ['KYIV_BASE_URL'],
+  })
+  .refine((c) => c.KYIV_CLIENT_AUTH !== undefined || c.KYIV_BASE_URL !== PROD_KYIV_URL, {
+    message: 'KYIV_CLIENT_AUTH is required for the real API (see docs/README.md, the request envelope)',
+    path: ['KYIV_CLIENT_AUTH'],
   });
 
 export type Config = {
@@ -50,6 +60,7 @@ export type Config = {
   encryptionKey: Buffer;
   dbPath: string;
   kyivBaseUrl: string;
+  kyivClientAuth: string;
   devMode: boolean;
   telegramTestEnv: boolean;
   backupDir: string;
@@ -71,6 +82,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     encryptionKey: e.ENCRYPTION_KEY,
     dbPath: e.DB_PATH,
     kyivBaseUrl: e.KYIV_BASE_URL,
+    // Against the mock, a placeholder is fine (the mock checks against the same placeholder).
+    kyivClientAuth: e.KYIV_CLIENT_AUTH?.toLowerCase() ?? MOCK_CLIENT_AUTH,
     devMode: e.DEV_MODE,
     telegramTestEnv: e.TELEGRAM_TEST_ENV,
     backupDir: e.BACKUP_DIR ?? join(dirname(e.DB_PATH), 'backups'),

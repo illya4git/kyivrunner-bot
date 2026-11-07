@@ -35,6 +35,7 @@ describe('config', () => {
     BOT_TOKEN: '123456:abcdefghijklmnopqrstuvwxyz',
     ADMIN_IDS: '1, 2',
     ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
+    KYIV_CLIENT_AUTH: 'ab'.repeat(32),
   };
   it('parses a valid env with defaults', () => {
     const c = loadConfig(base);
@@ -46,6 +47,13 @@ describe('config', () => {
   it('rejects a non-production API URL without DEV_MODE', () => {
     expect(() => loadConfig({ ...base, KYIV_BASE_URL: 'http://localhost:8787' })).toThrow(/DEV_MODE/);
     expect(loadConfig({ ...base, KYIV_BASE_URL: 'http://localhost:8787/', DEV_MODE: 'true' }).kyivBaseUrl).toBe('http://localhost:8787');
+  });
+  it('requires KYIV_CLIENT_AUTH for the real API, not for the mock', () => {
+    const { KYIV_CLIENT_AUTH: _omit, ...noAuth } = base;
+    expect(() => loadConfig(noAuth)).toThrow(/KYIV_CLIENT_AUTH is required/);
+    expect(loadConfig({ ...noAuth, KYIV_BASE_URL: 'http://localhost:8787', DEV_MODE: 'true' }).kyivClientAuth).toMatch(/^mock-/);
+    expect(() => loadConfig({ ...base, KYIV_CLIENT_AUTH: 'nope' })).toThrow(/64 hex/);
+    expect(loadConfig(base).kyivClientAuth).toBe('ab'.repeat(32));
   });
   it('rejects bad admin ids and keys', () => {
     expect(() => loadConfig({ ...base, ADMIN_IDS: 'abc' })).toThrow(/ADMIN_IDS/);
