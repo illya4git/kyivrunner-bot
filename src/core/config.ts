@@ -29,6 +29,8 @@ const EnvSchema = z
     DB_PATH: z.string().default('./data/bot.sqlite'),
     KYIV_BASE_URL: z.url().default(PROD_KYIV_URL).transform((u) => u.replace(/\/+$/, '')),
     DEV_MODE: z.stringbool().default(false),
+    /** Use Telegram's separate test environment (needs a bot registered there). */
+    TELEGRAM_TEST_ENV: z.stringbool().default(false),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   })
   .refine((c) => c.DEV_MODE || c.KYIV_BASE_URL === PROD_KYIV_URL, {
@@ -43,6 +45,7 @@ export type Config = {
   dbPath: string;
   kyivBaseUrl: string;
   devMode: boolean;
+  telegramTestEnv: boolean;
   logLevel: z.infer<typeof EnvSchema>['LOG_LEVEL'];
 };
 
@@ -60,6 +63,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dbPath: e.DB_PATH,
     kyivBaseUrl: e.KYIV_BASE_URL,
     devMode: e.DEV_MODE,
+    telegramTestEnv: e.TELEGRAM_TEST_ENV,
     logLevel: e.LOG_LEVEL,
   };
 }

@@ -29,6 +29,18 @@ export function kyivDay(ms: number): string {
   return dayFmt.format(ms);
 }
 
+/** Last millisecond of the Kyiv calendar day containing `ms` (23:59:59.999 local). DST-safe. */
+export function kyivDayEnd(ms: number): number {
+  const today = kyivDay(ms);
+  const [y, m, d] = today.split('-').map(Number) as [number, number, number];
+  const tomorrow = kyivDay(Date.UTC(y, m - 1, d + 1, 12));
+  for (const offsetH of [2, 3]) {
+    const midnight = Date.UTC(y, m - 1, d + 1) - offsetH * 3_600_000;
+    if (kyivDay(midnight) === tomorrow && kyivDay(midnight - 1) === today) return midnight - 1;
+  }
+  throw new Error(`cannot find Kyiv midnight after ${today}`);
+}
+
 const timeFmt = new Intl.DateTimeFormat('en-GB', { timeZone: KYIV_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const dateTimeFmt = new Intl.DateTimeFormat('en-GB', {
   timeZone: KYIV_TZ,

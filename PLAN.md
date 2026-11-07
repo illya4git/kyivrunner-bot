@@ -97,8 +97,8 @@ Rules:
 |---|---|
 | 200 | zod parse. On a mismatch, log a redacted body and raise `ApiShapeError`. |
 | 401 / 423 | Mark the credentials `invalid`, block generation, alert admins once. |
-| 429 | Honour `Retry-After`, else exponential backoff. Users see "busy, try again shortly". |
-| 5xx / network | 2 retries with jitter, then a friendly error. |
+| 429 | GET: wait out `Retry-After` once (capped at 30s). POST: no retry. Users see "busy, try again shortly". |
+| 5xx / network / timeout | GET: 2 retries with jitter. **POST (generate): never retried.** A lost response may still have reserved a trip, so the error is flagged `ambiguous` and TicketService reconciles via `GET /qr` (phase 4). |
 
 ---
 

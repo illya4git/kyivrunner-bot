@@ -16,6 +16,8 @@ export type CreateBotOptions = {
   token: string;
   services: Services;
   devMode: boolean;
+  /** Talk to Telegram's test environment instead of production. */
+  telegramTestEnv?: boolean;
   /** Skip getMe (tests). */
   botInfo?: UserFromGetMe;
   /** Extra API transformers, closest to the network (tests use one to fake Telegram). */
@@ -36,7 +38,10 @@ const htmlDefaults: Transformer = (prev, method, payload, signal) => {
 };
 
 export function createBot(opts: CreateBotOptions): { bot: Bot<BotContext>; deps: BotDeps } {
-  const bot = new Bot<BotContext>(opts.token, opts.botInfo ? { botInfo: opts.botInfo } : {});
+  const bot = new Bot<BotContext>(opts.token, {
+    ...(opts.botInfo ? { botInfo: opts.botInfo } : {}),
+    ...(opts.telegramTestEnv ? { client: { environment: 'test' as const } } : {}),
+  });
 
   // grammY runs the most recently installed transformer first, so these extra ones
   // (tests: a fake Telegram) are installed first and sit closest to the network.

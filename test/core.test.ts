@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { kyivDay, kyivDateTime, kyivTime } from '../src/core/clock.js';
+import { kyivDay, kyivDayEnd, kyivDateTime, kyivTime } from '../src/core/clock.js';
 import { loadConfig } from '../src/core/config.js';
 import { Mutex } from '../src/core/mutex.js';
 import { esc } from '../src/core/html.js';
@@ -14,6 +14,16 @@ describe('Kyiv time helpers', () => {
     expect(kyivDay(Date.UTC(2026, 6, 1, 20, 59))).toBe('2026-07-01');
     expect(kyivDay(Date.UTC(2026, 6, 1, 21, 0))).toBe('2026-07-02');
     expect(kyivTime(Date.UTC(2026, 6, 1, 5, 14))).toBe('08:14');
+  });
+  it('finds the end of the Kyiv day, across DST changes', () => {
+    expect(kyivDayEnd(Date.UTC(2026, 10, 7, 8))).toBe(Date.UTC(2026, 10, 7, 22) - 1); // UTC+2
+    expect(kyivDayEnd(Date.UTC(2026, 6, 1, 8))).toBe(Date.UTC(2026, 6, 1, 21) - 1); // UTC+3
+    // 2026-03-29: clocks jump forward at 03:00, midnight at the end of the day is UTC+3
+    expect(kyivDayEnd(Date.UTC(2026, 2, 29, 0, 30))).toBe(Date.UTC(2026, 2, 29, 21) - 1);
+    // 2026-10-25: clocks go back, midnight at the end of the day is UTC+2
+    expect(kyivDayEnd(Date.UTC(2026, 9, 25, 12))).toBe(Date.UTC(2026, 9, 25, 22) - 1);
+    // just before midnight stays on the same day
+    expect(kyivDayEnd(Date.UTC(2026, 10, 7, 21, 59, 59))).toBe(Date.UTC(2026, 10, 7, 22) - 1);
   });
   it('formats date-time', () => {
     expect(kyivDateTime(Date.UTC(2026, 10, 7, 6, 5))).toBe('07.11.2026 08:05');

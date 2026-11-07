@@ -21,6 +21,7 @@ async function main(): Promise<void> {
   const { bot, deps } = createBot({
     token: config.botToken,
     devMode: config.devMode,
+    telegramTestEnv: config.telegramTestEnv,
     services: { clock, log, access, audit, settings },
   });
 
@@ -38,7 +39,7 @@ async function main(): Promise<void> {
   process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
   await bot.init();
-  log.info({ bot: bot.botInfo.username, devMode: config.devMode, kyiv: config.kyivBaseUrl }, 'starting');
+  log.info({ bot: bot.botInfo.username, devMode: config.devMode, telegramTestEnv: config.telegramTestEnv, kyiv: config.kyivBaseUrl }, 'starting');
   void deps.menus
     .syncAll(access.byRoles(['user', 'admin']))
     .catch((err) => log.warn({ err }, 'command menu sync failed'));
