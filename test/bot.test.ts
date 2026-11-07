@@ -134,6 +134,35 @@ describe('bot: language', () => {
   });
 });
 
+describe('bot: every public command renders valid HTML', () => {
+  // Regression: /help sent "<id|@user>" unescaped and Telegram rejected the message.
+  for (const role of ['guest', 'user', 'admin'] as const) {
+    for (const lang of ['uk', 'en'] as const) {
+      it(`${role} / ${lang}`, async () => {
+        const s = setup();
+        const who = { id: 300, first_name: 'A<b>&', username: 'x', language_code: lang };
+        s.access.touch(who);
+        if (role !== 'guest') s.access.setRole(who.id, role, ADMIN_ID);
+        for (const cmd of ['/start', '/help', '/whoami', '/lang', '/request', '/users', '/requests', '/qr']) {
+          await s.text(who, cmd);
+        }
+        if (role === 'admin') await s.press(who, `uv:${who.id}`);
+        expect(s.take().length).toBeGreaterThan(0);
+      });
+    }
+  }
+});
+
+describe('test harness', () => {
+  it('rejects HTML that Telegram would reject', async () => {
+    const { telegramHtmlError } = await import('./helpers/telegram-html.js');
+    expect(telegramHtmlError('/grant <id|@user>')).toMatch(/Unsupported start tag "id\|@user"/);
+    expect(telegramHtmlError('<b>x</i>')).toMatch(/unmatched/);
+    expect(telegramHtmlError('a & b')).toMatch(/bare &/);
+    expect(telegramHtmlError('<b>ok</b> &lt;id&gt; <code>1</code> <a href="x">l</a>')).toBeNull();
+  });
+});
+
 describe('bot: groups', () => {
   it('ignores group chats without creating users', async () => {
     const s = setup();

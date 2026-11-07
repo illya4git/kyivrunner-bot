@@ -1,5 +1,6 @@
 import { Composer } from 'grammy';
 import { kyivDateTime } from '../../core/clock.js';
+import { esc } from '../../core/html.js';
 import { LOCALES, type Locale } from '../../db/schema.js';
 import { displayName, messages } from '../../i18n/index.js';
 import type { BotContext } from '../context.js';
@@ -22,7 +23,8 @@ export function publicCommands(deps: BotDeps): Composer<BotContext> {
   c.command('help', (ctx) => {
     const { user, t } = ctx;
     const role = user.role === 'banned' ? 'guest' : user.role;
-    const lines = [...MENUS[role], ...(HELP_EXTRAS[role] ?? [])].map((cmd) => `/${cmd} — ${t.cmd[cmd]}`);
+    // Descriptions are plain text (they contain usage like <id|@user>), so escape them.
+    const lines = [...MENUS[role], ...(HELP_EXTRAS[role] ?? [])].map((cmd) => `/${cmd} — ${esc(t.cmd[cmd])}`);
     return ctx.reply([t.help.header(t.roles[user.role]), '', ...lines].join('\n'));
   });
 

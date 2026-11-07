@@ -1,6 +1,7 @@
 import type { Transformer } from 'grammy';
 import type { Update, UserFromGetMe } from 'grammy/types';
 import { createBot } from '../../src/bot/bot.js';
+import { telegramHtmlError } from './telegram-html.js';
 import type { Services } from '../../src/bot/context.js';
 
 export type ApiCall = { method: string; payload: Record<string, unknown> };
@@ -35,6 +36,14 @@ export function makeTestBot(services: Services) {
     calls.push({ method, payload: p });
     const failure = failures.get(method);
     if (failure) return { ok: false, error_code: 400, description: failure } as never;
+    // Validate HTML exactly where Telegram would, so markup bugs fail tests instead of production.
+    if (p.parse_mode === 'HTML') {
+      for (const field of ['text', 'caption'] as const) {
+        const value = p[field];
+        const err = typeof value === 'string' ? telegramHtmlError(value) : null;
+        if (err) throw new Error(`Telegram would reject ${method}.${field}: ${err}\n---\n${value}`);
+      }
+    }
     const chat = { id: Number(p.chat_id ?? 0), type: 'private' as const };
     const message = { message_id: nextMessageId++, date: 0, chat, text: p.text };
     const result = method.startsWith('send') || method === 'editMessageText' ? message : true;
@@ -42,6 +51,10 @@ export function makeTestBot(services: Services) {
   };
 
   const { bot, deps } = createBot({ token: 'test:token-0000000000000000', services, devMode: true, botInfo: BOT_INFO, offline: true, transformers: [fake] });
+  // Production swallows handler errors (logs + "something went wrong"); tests must see them.
+  bot.catch((e) => {
+    throw e.error;
+  });
 
   type From = { id: number; first_name?: string; username?: string; language_code?: string };
   const user = (f: From) => ({ is_bot: false, first_name: f.first_name ?? `U${f.id}`, ...f });

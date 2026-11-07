@@ -19,6 +19,7 @@ export const uk = {
     never: 'ніколи',
   },
 
+  /** Plain text (not HTML): used both in Telegram's command menu and, escaped, in /help. */
   cmd: {
     start: 'Почати',
     help: 'Довідка',

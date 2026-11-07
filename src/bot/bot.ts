@@ -18,7 +18,7 @@ export type CreateBotOptions = {
   devMode: boolean;
   /** Skip getMe (tests). */
   botInfo?: UserFromGetMe;
-  /** Extra API transformers, applied first (tests use one to fake Telegram). */
+  /** Extra API transformers, closest to the network (tests use one to fake Telegram). */
   transformers?: Transformer[];
   /** Disable network-related transformers like auto-retry/throttling (tests). */
   offline?: boolean;
@@ -38,12 +38,14 @@ const htmlDefaults: Transformer = (prev, method, payload, signal) => {
 export function createBot(opts: CreateBotOptions): { bot: Bot<BotContext>; deps: BotDeps } {
   const bot = new Bot<BotContext>(opts.token, opts.botInfo ? { botInfo: opts.botInfo } : {});
 
+  // grammY runs the most recently installed transformer first, so these extra ones
+  // (tests: a fake Telegram) are installed first and sit closest to the network.
+  for (const t of opts.transformers ?? []) bot.api.config.use(t);
   bot.api.config.use(htmlDefaults);
   if (!opts.offline) {
     bot.api.config.use(apiThrottler());
     bot.api.config.use(autoRetry({ maxRetryAttempts: 3, maxDelaySeconds: 60 }));
   }
-  for (const t of opts.transformers ?? []) bot.api.config.use(t);
 
   const deps: BotDeps = {
     ...opts.services,
