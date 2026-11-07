@@ -1,27 +1,75 @@
-# kyivrunner-bot — master plan (v2)
+# kyivrunner-bot — master plan (v3, as built)
 
 A Telegram bot that hands out Kyiv Digital transit QR tickets from **one** personal account to a
 small, admin-approved group, without sharing the account's credentials.
 
-API reference: [docs/](docs/README.md). Status: **design agreed in principle, not yet built.**
+Repository: https://github.com/illya4git/kyivrunner-bot · API reference: [docs/](docs/README.md) ·
+Operations: [README.md](README.md)
 
-### Decisions log
+## Status
+
+**Phases 1–7 are built** (123 tests, typecheck clean). **Phase 8, the live smoke test, is next.**
+
+| Phase | Scope | Status |
+|---|---|---|
+| 1. Foundation | Config, DB + migrations, i18n, roles, audit middleware, public commands, admin user management | ✅ Done |
+| 2. Mock API + KyivClient | Stateful mock, control plane, client (envelope, rate limit, retries, error mapping), contract tests | ✅ Done |
+| 3. Credentials + card | `/credentials` entry and health, encryption, alerts, `/card` | ✅ Done. Login with the real token verified. |
+| 4. Tickets | `/qr`, quotas, safeguards, one message per ticket, lost-response recovery | ✅ Done |
+| — Mock control panel | HTML panel at `/_mock/` (moved up from phase 6) | ✅ Done |
+| 5. Tracking | Background tracker, place of use, image retirement, startup reconciliation, dev clock | ✅ Done |
+| 6. Admin reporting | `/settings` `/set` `/pause` `/resume` `/stats` `/logs` `/export`, alerts, pruning | ✅ Done |
+| 7. Ship | Dockerfile, compose files, backups, healthcheck, runbook | ✅ Done. amd64 verified; arm64 not built yet. |
+| — Publish | Public GitHub repo, secret scrubbed from history, no-reply author email | ✅ Done |
+| 8. Live smoke test | Deploy on the target box, real `/qr`, use/expiry, place, backups, health | ⏳ Next |
+
+### Verification status
+
+| Item | Status |
+|---|---|
+| Request envelope and card listing against the real API | **Verified live** (credential entry and `/card`) |
+| Generate, `/qr` list, feed, ticket lifecycle | Verified against the mock only; **phase 8** |
+| Feed lag in practice (how soon `val_` appears after a scan) | Unknown; `place_match_window_sec` and the 4-attempt budget are guesses |
+| Error responses the mock guessed (422 on a blocked or empty card, 401 on a device mismatch) | Unverified. The client handles any 4xx either way. |
+| Token refresh (`/auth/refresh`) | Not used: tokens are re-entered by admins |
+| Docker image on amd64 | Built and run here (migrations, non-root, config errors, mock image) |
+| Docker image on arm64 | **Not built yet** (no emulation on the dev host). Every component publishes arm64 builds. |
+| Backup restore procedure (README) | Backups are tested; the restore steps aren't |
+
+---
+
+## Decisions log
+
 | # | Decision |
 |---|---|
-| D1 | Place of use comes from the per-card **feed** (`val_` events). We match the code's `used_at` to the event's `created_at`. |
-| D2 | **One card** for everyone (`active_card_id` setting). |
+| D1 | Place of use comes from the per-card **feed** (`val_` events), matched by time: the code's `used_at` vs the event's `created_at`. |
+| D2 | **One card** for everyone (`active_card_id`, picked at credential setup or with `/card`). |
 | D3 | Quota counts **issued** codes per Kyiv day. |
-| D4 | A global daily cap and a trip reserve are both on by default and admin-tunable. |
-| D5 | UI in **Ukrainian and English**, auto-picked from Telegram `language_code`, overridable with `/lang`. |
-| D6 | Credentials are entered **in the bot chat**. The messages are deleted right after reading. |
-| D7 | Admins are notified about a guest **only on `/request`**. |
-| D8 | Deployment is a **single Docker container**, multi-arch (`linux/amd64`, `linux/arm64`). |
-| D9 | The event log is kept for **365 days**. |
-| D10 | **One Telegram message per ticket.** It's never re-sent while it exists. A repeat `/qr` replies to it. Status changes edit that one message. |
-| D11 | A **controllable mock Kyiv Digital API** (with a control panel) for development and tests. |
-| D12 | **Every status change** (used, expired) does two things: it **edits** the ticket message, and it posts a short **reply** to that message so the user gets a notification. Not configurable. |
+| D4 | A global daily cap and a trip reserve, both on by default and admin-tunable. |
+| D5 | UI in **Ukrainian and English**, picked from Telegram's `language_code` (`uk` → Ukrainian, anything else → English), switchable with `/lang`. |
+| D6 | Credentials are entered **in the bot chat**. Each message is deleted right after reading. |
+| D7 | Admins hear about a guest **only on `/request`**. |
+| D8 | Deployment is a **single Docker container** with one volume, multi-arch (`linux/amd64`, `linux/arm64`). |
+| D9 | The event log is kept for **365 days** (`log_retention_days`), pruned nightly. |
+| D10 | **One Telegram message per ticket.** A repeat request replies to it. It's re-sent only if the user deleted it. |
+| D11 | A **controllable mock Kyiv Digital API** with a control panel, used in development and in tests. |
+| D12 | **Every status change** (used, expired) edits the ticket message **and** replies to it, so the user gets a notification. |
 | D13 | Users see **places** in their own `/history`. |
-| D14 | The QR image is **kept when the code is used**, for conductor re-scans. It's replaced with a placeholder only at expiry. A used ticket's image is swapped silently at midnight. |
+| D14 | The QR image is **kept when the code is used** (conductor re-scans). Expiry swaps it for a placeholder; a used ticket's image is swapped silently after midnight. |
+| D15 | Credential entry is a **two-step in-memory state machine** (token, then UUID), with `/cancel` and a 10-minute timeout. The grammY conversations plugin was dropped: it rebuilds the context on every step, losing `ctx.user`/`ctx.t`. |
+| D16 | **Token hygiene everywhere:** any message that looks like a JWT is deleted, whoever sends it; JWTs inside commands are logged as `[jwt]`; free text is logged by length only. |
+| D17 | **GETs are retried, generate never is.** A generate whose response was lost is reconciled against a code snapshot taken just before generating, instead of reserving a second trip. |
+| D18 | The **tracker sync runs under the issuing lock**, so a code mid-issue is never mistaken for a foreign one. **No separate midnight cron:** the tracker handles expiry and image retirement within one poll interval. |
+| D19 | **Place lookup:** one attempt the moment a code turns used, then up to 3 tracker retries. The first caption and reply say "finding the place…" and are edited once it's known. A feed event is linked to at most one ticket (an in-code filter plus a unique column). |
+| D20 | The **mock control panel** was moved up (shipped after phase 4). It's served by the mock at `/_mock/`. The mock's request log records only `/api/*` calls. |
+| D21 | `npm run dev:mock` **resets the bot's mock database on each start** (users and roles kept), provisions dev credentials and the card, and makes the mock follow the bot's clock. |
+| D22 | **`/dev clock`** (`+2h`, `-30m`, `+1d`, `midnight`, `reset`) and **`/dev tick`** for admins in DEV_MODE. |
+| D23 | **Alerts:** credentials invalid/restored; expiry at 14/7/3/1 days and on expiry; low balance and blocked generation once per Kyiv day (deduplicated through the audit log, so restarts don't repeat them); a Kyiv Digital outage after 5 failed tracker passes, once per incident, plus recovery. |
+| D24 | **`/logs [user] [count]`** arguments are positional. Interactions are hidden unless a user is given. |
+| D25 | The app's static **`X-Client-Auth` is not in the repository.** It comes from `KYIV_CLIENT_AUTH` (required for the real API); the mock uses a placeholder. The repo is public, the value was scrubbed from all history before the first push, and commits use the GitHub no-reply address. |
+| D26 | Compose keeps secrets in **`.env` via `env_file`**, without listing variables in the compose file. |
+| D27 | **Health** = polling Telegram and a tracker pass within the last 10 minutes. Credential problems are reported, but don't fail the check (a restart wouldn't fix them). |
+| D28 | `TELEGRAM_TEST_ENV` switches to Telegram's test servers. The fake Telegram in tests validates HTML the way Telegram does. |
 
 ---
 
@@ -29,37 +77,37 @@ API reference: [docs/](docs/README.md). Status: **design agreed in principle, no
 
 | Fact (docs/) | Consequence for the bot |
 |---|---|
-| Generate = `POST /api/v4/card/travel/{id}/qr-ticket`, empty body, returns **all** codes, new one is `codes[0]` | Generation is **serialized** (global mutex), and `codes[0].id` is checked against the DB. |
-| A QR is a **day pass**: `expire_at` = local midnight; `used_at` becomes non-null when the code is validated | A ticket goes `active → used` or `active → expired`. |
-| Each generation **reserves one trip**. Unused ones come back at midnight (`eqr_` event) | Quota counts issued codes. The one-active-code rule stops hoarding. |
-| No way to cancel or revoke a code | A lost QR means pointing the user back to the same code, never generating a replacement. |
-| `GET /api/v4/qr` lists every code with `used_at` | One shared **poller** tracks all active tickets in one call. |
-| `GET /card/travel/{id}/feed`: `type:1` / `val_` events carry mode (`title`) and station/stop (`description`), but no code id | Place = the `val_` event whose `created_at` best matches the code's `used_at`. The feed is fetched only when a code turns *used*. |
-| The feed may include personal data (`info` block) | Only the matched event's fields are stored. The raw feed is never persisted or logged. |
-| 60 req/min **per token**, shared with the owner's phone app | Self-imposed limit, default **20/min**. |
-| Token lives ~186 days; `401` = stale; refresh is unverified | No refreshing. Admins re-supply the token, and get warned early using the JWT `exp` claim. |
-| Prefer a **residential UA IP** | The container runs on a home box (ARM is fine). Telegram **long polling**, no inbound ports. |
-| Day boundaries are Kyiv-local | Every "day" is computed in `Europe/Kyiv`, independent of the host TZ. |
+| Generate = `POST /api/v4/card/travel/{id}/qr-ticket`, empty body, returns **all** codes, new one first | Generation is serialized. The new code is identified against a snapshot taken just before generating (D17). |
+| A QR is a **day pass**: `expire_at` = local midnight; `used_at` is set when validated | A ticket goes `active → used` or `active → expired`. |
+| Each generation **reserves one trip**; unused ones come back at midnight (`eqr_`) | Quota counts issued codes. The one-active-code rule stops hoarding. |
+| No way to cancel or revoke a code | A lost QR means pointing the user back to the same code. |
+| `GET /api/v4/qr` lists every code with `used_at` | One shared tracker checks all active tickets in one call. |
+| Feed `val_` events carry mode (`title`) and station (`description`), but no code id | Place = the `val_` event nearest the code's `used_at` (D19). |
+| The feed may include personal data | Only the matched event's id, mode and place are stored. |
+| 60 req/min **per token**, shared with the owner's phone app | Self-imposed limit, default 20/min (`api_rate_per_min`). |
+| Token lives ~186 days; `401` = stale; refresh unverified | No refreshing. Admins re-enter it and are warned from the JWT `exp`. |
+| Prefer a **residential UA IP** | Runs on a home box. Telegram long polling, no inbound ports. |
+| Day boundaries are Kyiv-local | Every "day" is computed in `Europe/Kyiv`, DST-safe. |
+| `X-Client-Auth` is a static app secret | Supplied through `KYIV_CLIENT_AUTH`, never committed (D25). |
 
 ---
 
 ## 2. Stack
 
-| Concern | Choice | Why |
-|---|---|---|
-| Runtime | **Node 24 LTS**, TypeScript (strict), ESM | Native `fetch`, already on the host. |
-| Telegram | **grammY** + `auto-retry` + `transformer-throttler` | TS-first. The two-step credential entry is a small in-memory state machine. The conversations plugin rebuilds the context on every step, which loses `ctx.user`/`ctx.t`. |
-| DB | **SQLite** via `better-sqlite3`, WAL mode | One file, synchronous, fast. Prebuilt binaries exist for linux-arm64 and x64. |
-| Schema / queries | **Drizzle ORM** + `drizzle-kit` SQL migrations | Typed, little overhead. Migrations are committed and applied on startup. |
-| Validation | **zod** | Env, admin input, and **every Kyiv response** (fail loudly if the API shape drifts). |
-| QR image | `qrcode` → PNG buffer | Plus a static "USED" / "EXPIRED" placeholder image for edits. |
-| Scheduling | `croner` (Kyiv TZ) + the tracker loop | Midnight sweep, token-expiry warnings, daily DB backup, log pruning. |
-| i18n | Typed TS dictionaries `i18n/{uk,en}.ts` | `en` is typed as `typeof uk`, so a missing key fails the **build**. No runtime i18n framework needed. |
-| Logging | `pino` with `redact` | Operational logs only. The audit trail lives in the DB. |
-| Crypto | `node:crypto` AES-256-GCM | Encrypts the access token at rest. |
-| Mock API | `node:http` + a tiny router (Hono) and one static HTML control panel | Same code used in vitest (in-process) and in dev (a separate process). |
-| Tests | **vitest** | Services against the mock API and in-memory SQLite. Bot handlers through a grammY API transformer that records outgoing calls. |
-| Packaging | Multi-stage Dockerfile, `docker buildx` for amd64 + arm64 | One container, one volume `/data`. |
+| Concern | Choice |
+|---|---|
+| Runtime | Node 24 LTS, TypeScript 7 (strict), ESM |
+| Telegram | grammY + `auto-retry` + `transformer-throttler` |
+| DB | SQLite via `better-sqlite3` (WAL), Drizzle ORM + `drizzle-kit` migrations, applied on startup |
+| Validation | zod 4: env, admin input, every Kyiv Digital response |
+| QR | `qrcode` → PNG. Placeholders are drawn procedurally (no binary assets). |
+| Scheduling | `croner` (Kyiv TZ) for expiry warnings (10:00), pruning (03:30), backups (04:00); the tracker loop for everything else |
+| i18n | Typed dictionaries `i18n/{uk,en}.ts`; a missing key fails the build |
+| Logging | pino (redacted) to stdout. The audit trail is in the DB. |
+| Crypto | AES-256-GCM (`node:crypto`) |
+| Mock API | `node:http` with a small router, plus a single-file HTML panel |
+| Tests | vitest: the mock in-process, in-memory SQLite, and a fake Telegram that records calls, validates HTML and simulates deleted messages |
+| Packaging | Multi-stage Dockerfile (`node:24-bookworm-slim`, tini, non-root), compose |
 
 ---
 
@@ -68,37 +116,37 @@ API reference: [docs/](docs/README.md). Status: **design agreed in principle, no
 ```
   Telegram (long polling)
         │
-  bot/  middleware: private-chat only → upsert user + locale → audit "interaction" → role guard
-        handlers: public / user / admin commands, callback queries, conversations
+  bot/  core middleware (private chats only → user + locale → audit) → credential entry → JWT guard
+        → public commands → user commands → admin commands (+ /dev) → fallback
+        TicketView (presenter), Notifier, CommandMenus, alerts wiring
         │
   services/
-    AccessService      roles, /request flow, grant/revoke, last-admin protection, per-role command menus
-    TicketService      /qr: point to existing or generate; quotas; safeguards; mutex
-    TicketTracker      poll GET /qr → transitions → PlaceResolver → TicketView.update
-    PlaceResolver      feed fetch + used_at↔created_at matching (with retries for feed lag)
-    TicketView         owns THE ticket message: send once, reply-to, edit on change, detect deletion
-    CredentialService  encrypted token store, validation, JWT exp, health state
-    SettingsService    typed key/value settings with defaults
-    AuditService       append-only events, stats/export queries
-    Notifier           admin alerts (deduped), respects pause
+    AccessService      roles, /request flow, quotas, last-admin protection
+    TicketService      issue (lock, quotas, safeguards, snapshot, reconciliation), transitions, places, retirement
+    TicketTracker      background passes: retire images, sync under the lock, pending places, foreign codes, backoff
+    PlaceResolver      feed matching by time, one event ↔ one ticket
+    CredentialService  encrypted storage, health from live results, expiry checks
+    SettingsService    typed settings registry
+    AuditService       append-only events, alert dedup, pruning
+    StatsService       reporting queries
         │
-  kyiv/  KyivClient — header envelope, rate limiter, retry/backoff, error mapping, zod schemas
-  db/    Drizzle schema, migrations, repositories
-  core/  config (zod env), Clock (Kyiv TZ, injectable), crypto, logger, mutex
+  kyiv/  KyivClient: envelope, rate limiter, retries, error mapping, zod schemas
+  db/    Drizzle schema + client      core/  config, clock, crypto, csv, backup, health, logger, mutex
 ```
 
 Rules:
-- **Handlers hold no logic.** Services never import grammY types. Telegram I/O goes through `TicketView` and `Notifier`, which are thin interfaces with fakes for tests.
-- **One `KyivClient`** owns the rate-limit budget. Its base URL is configurable, which is how it gets pointed at the mock.
-- **Injectable `Clock`**, so tests can jump to midnight.
+- Handlers hold no logic. Services never import grammY: Telegram I/O goes through `TicketPresenter` (implemented by `TicketView`) and service events (`EventEmitter`) wired to admin alerts in `bot/alerts.ts`.
+- `buildServices()` wires the same service graph for `main.ts`, `dev:mock` and the tests.
+- One `KyivClient` owns the rate-limit budget. The process clock is injectable and shiftable in dev.
 
 ### KyivClient error mapping
 | HTTP | Action |
 |---|---|
-| 200 | zod parse. On a mismatch, log a redacted body and raise `ApiShapeError`. |
-| 401 / 423 | Mark the credentials `invalid`, block generation, alert admins once. |
-| 429 | GET: wait out `Retry-After` once (capped at 30s). POST: no retry. Users see "busy, try again shortly". |
-| 5xx / network / timeout | GET: 2 retries with jitter. **POST (generate): never retried.** A lost response may still have reserved a trip, so the error is flagged `ambiguous` and TicketService reconciles via `GET /qr` (phase 4). |
+| 200 | zod parse; a mismatch is logged with the differing fields and raised as `shape` |
+| 401 / 423 | `unauthorized`: the credentials are marked invalid, use stops, admins are alerted once |
+| 429 | GET: wait out `Retry-After` once (≤30s). POST: no retry. |
+| 5xx / network / timeout | GET: 2 retries with jitter. POST (generate): never retried; flagged `ambiguous` and reconciled (D17). |
+| other 4xx | `rejected`, with the server's message shown |
 
 ---
 
@@ -106,200 +154,130 @@ Rules:
 
 ### Roles
 `guest` (default), `user`, `admin`, `banned`.
-- **Guests** get "No access. Send /request to ask for it." `/request` notifies all admins with [✅ Grant user] [🚫 Ban] [Ignore]. One pending request per guest, with a **24h cooldown** after an ignore.
-- **Banned** users are ignored silently but still logged.
-- Bootstrap admins come from env `ADMIN_IDS`. They can't be demoted from inside the bot, and the last admin can't be demoted either.
-- Every update from every role is written to the audit log.
+- Guests can ask with `/request`: admins get [Grant] [Ban] [Ignore]. One pending request per guest, and a 24h cooldown after an ignore.
+- Banned users are ignored silently but logged. Group chats are logged and never create users.
+- `ADMIN_IDS` admins can't be demoted from the bot, and the last admin can't be demoted either.
 
-### `/qr` (or the 🎫 button)
-1. Role ≥ user, the bot isn't paused, and credentials are `ok`/`expiring`.
-2. **The user has an active ticket** → refresh it from the API first (it may have just been used).
-   - Still active → `TicketView.pointTo(ticket)`: send a short **reply to the existing ticket message** ("⬆️ Your active QR is here, valid until 23:59").
-   - That reply fails with *message to be replied not found* (the user deleted it) → **re-send the QR photo once** and store the new `message_id`. Log a `ticket_resent` event.
-   - Telegram doesn't report deletions in private chats, so the reply attempt itself *is* the deletion check. It costs one call and needs no extra probing.
-3. No active ticket → check the **user daily quota** (issued today < `users.daily_quota ?? default_daily_quota`).
-4. **Global safeguards:** issued today across all users < `global_daily_cap`; card `monthly_tickets_balance` > `reserve_trips`; `actions.generate_qr && !qr_generate_blocked`.
-5. Under the **generation mutex**: POST generate → `codes[0]` → insert the `tickets` row.
-6. `TicketView.send(ticket)`: one photo message (`protect_content: true`) with a caption (card label, valid until, quota n/N) and a [🔄 Refresh] button. Store `chat_id` and `message_id`.
+### `/qr` (or 🎫)
+1. Not paused, credentials usable, active card set.
+2. Fetch the code list (this refreshes the user's ticket and is the snapshot). Still active → reply to its message, or re-send it if the message was deleted.
+3. Quota (issued today < user quota). If it's used up and today's used ticket is still valid, point to it for inspection.
+4. Global cap, card `canGenerate`, trips > `reserve_trips`.
+5. Under the lock: generate → identify the new code against the snapshot → record it. On an ambiguous failure, look for the new code in the list rather than retrying.
+6. Send the protected photo with a caption (label, valid until, quota) and [🔄 Refresh].
 
 ### The single ticket message (TicketView)
-| Event | Action on the one message |
+| Event | Action |
 |---|---|
-| Issued | Send photo + caption + [🔄 Refresh] |
-| Repeat `/qr` | Reply to it (re-send only if it's gone) |
-| 🔄 Refresh pressed | Re-check the API, edit the caption if anything changed, answer the callback with a toast |
-| Used | **Edit the caption only** (`editMessageCaption`). **The QR image stays**, because conductors may re-scan it to check the ride. Caption: ✅ used at 08:14, 🚇 Metro, Politekhnichnyi Instytut. Keep the QR open for inspection until 23:59. Button removed. **Reply:** "✅ Your QR was used at 08:14 — Metro, Politekhnichnyi Instytut". |
-| Place resolved late (feed lag) | **Edit** the caption to add the place. No second reply. The first reply says "place pending…" and is edited too. |
-| Expired | **Edit:** `editMessageMedia` → "EXPIRED" placeholder. Caption: ⌛ not used, the trip went back to the card. **Reply:** "⌛ Your QR expired unused". |
-| Used ticket passes `expire_at` (midnight) | **Silent** `editMessageMedia` → "USED" placeholder. The QR is no longer valid, so it no longer needs to be shown. There's no reply and no status change: the ticket stays `used`. Done by the midnight sweep. |
-| Conductor check, but the message of a **used, not yet expired** ticket was deleted | `/status` (or 🎫 while the quota is exhausted) replies to the used ticket's message. If that's gone too, it re-sends the QR once, captioned "✅ already used at 08:14, for inspection". This never generates a new code. |
-| Message deleted | The edit fails → set `message_gone = 1`. The status update is then sent as a **standalone text message** (no QR image), so the user is still notified. |
-
-Each status change is always an edit **plus** a reply. Telegram doesn't notify on edits, so the reply is what pings the user. Replies are always text, never a new QR. Their ids are stored (`status_reply_id`), so a late place resolution can edit the reply as well.
-
-**Reply rules:** a user has at most one ticket active at a time, and every ticket transitions at most once. That caps notifications at one per ticket, so no extra dedup is needed. If tickets reach the midnight sweep in bulk, replies are paced by the throttler.
+| Issued | Send photo + caption + [🔄] |
+| Repeat request / `/status` | Reply to it; re-send once if it's gone |
+| Used | Edit the **caption only** (the QR stays), remove the button; **reply** "✅ used at 08:14 — Metro, Khreshchatyk" (or "finding the place…") |
+| Place found later | Edit the caption and the earlier reply; no new notification |
+| Place given up | Edit the "finding the place…" note away |
+| Expired | Swap in the ⏰ placeholder + caption; **reply** "⌛ expired unused" |
+| Used, after midnight | Silently swap in the ✓ placeholder with a final caption |
+| Message deleted | Mark it gone; notify with a standalone text message |
 
 ### Tracking (TicketTracker)
-- Runs only while active tickets exist: `GET /api/v4/qr` every `poll_interval_sec` (default 30s).
-- `used_at` set → status `used` → PlaceResolver → TicketView edit.
-- `expire_at` passed → status `expired`. No separate midnight cron: the tracker pass handles expiry and image retirement within one poll interval of midnight. Retirement is a DB-only check, so idle passes cost no API calls.
-- Codes the bot didn't issue (the owner using the app) → a `foreign_code` event, otherwise ignored.
-- On startup, every `active` row is reconciled.
+Every `poll_interval_sec` (30s), plus 30s–5min of backoff after Kyiv Digital failures:
+1. Retire used images past midnight (DB only).
+2. If anything is active: list codes under the issuing lock → transitions; log foreign codes once.
+3. Retry pending place lookups.
 
-### Place resolution (PlaceResolver)
-- On a transition to *used*, fetch `feed?page=1&per_page=30`. Take `type == 1` events. Pick the one with the smallest `|created_at − used_at|` within `place_match_window_sec` (default 120s) that isn't already linked to another ticket (`val_` id is unique in the DB).
-- No match yet (feed lag) → retry on the next 3 poll cycles, then give up with `place = NULL` (and log `place_unresolved`).
-- Store `place` (= `description`), `mode` (= `title`), and `kd_feed_event_id`. Nothing else from the feed is stored.
+The first pass runs at startup and reconciles anything that happened while the bot was down. Idle passes make no API calls. A rejected token stops all calls until it's fixed.
 
-### Credentials (in chat)
-`/credentials set` starts a conversation: it asks for the token, then the device UUID. **Each message is deleted right after it's read.** The bot then validates with `GET /api/v4/card/travel`, decodes the JWT `exp`, and stores the token encrypted. If the account has more than one card, the admin picks the active one from buttons.
-Health states: `ok` / `expiring` (exp < 14 days) / `invalid` / `missing`. Admins get warnings at 14, 7, 3, and 1 days before expiry, and right away on `invalid`.
+### Credentials
+`/credentials set` → token (format and expiry checked) → UUID → probed against Kyiv Digital → saved encrypted; the card is auto-picked or chosen. Health: `missing` / `ok` / `expiring` (<14 days) / `expired` / `invalid`. `/credentials check` re-tests; `clear` removes them.
 
 ---
 
 ## 5. Data model (SQLite)
 
 ```sql
-users(
-  tg_id INTEGER PK, username, first_name, last_name,
-  locale TEXT CHECK(locale IN ('uk','en')), locale_overridden INTEGER DEFAULT 0,
-  role TEXT CHECK(role IN ('guest','user','admin','banned')) DEFAULT 'guest',
-  daily_quota INTEGER NULL,                 -- NULL = default
-  access_requested_at, request_ignored_at,  -- /request flow
-  note, created_at, last_seen_at, role_changed_at, role_changed_by
-)
+users(tg_id PK, username, first_name, last_name, locale ('uk'|'en'), locale_overridden,
+      role ('guest'|'user'|'admin'|'banned'), daily_quota NULL, access_requested_at, request_ignored_at,
+      note, created_at, last_seen_at, role_changed_at, role_changed_by)
 
-credentials(                                 -- history kept; one row active
-  id PK, token_enc BLOB, token_iv BLOB, token_tag BLOB, device_uuid,
-  token_sub, token_exp, status, added_by, added_at, last_ok_at, last_error_at, last_error
-)
+credentials(id PK, token_enc, token_iv, token_tag, device_uuid, token_sub, token_exp,
+            status ('ok'|'invalid'|'replaced'), added_by, added_at, last_ok_at, last_error_at, last_error)
 
-settings(key TEXT PK, value TEXT, updated_by, updated_at)
+settings(key PK, value, updated_by, updated_at)
 
-tickets(
-  id PK, kd_ticket_id INTEGER UNIQUE, user_tg_id → users, card_id,
-  code TEXT,                                -- needed for a one-time re-send; valid ≤ 1 day
-  kyiv_day TEXT,                            -- 'YYYY-MM-DD'
-  status TEXT CHECK(status IN ('active','used','expired')),
-  issued_at, expire_at, used_at,
-  place TEXT NULL, mode TEXT NULL, kd_feed_event_id TEXT UNIQUE NULL, place_attempts INTEGER DEFAULT 0,
-  chat_id, message_id, message_gone INTEGER DEFAULT 0, resend_count INTEGER DEFAULT 0,
-  status_reply_id INTEGER NULL              -- the notification reply, edited if the place resolves late
-)
-  INDEX (user_tg_id, kyiv_day), INDEX (status)
+tickets(id PK, kd_ticket_id UNIQUE, user_tg_id → users, card_id, code, kyiv_day, label,
+        status ('active'|'used'|'expired'), issued_at, expire_at, used_at,
+        place, mode, kd_feed_event_id UNIQUE, place_attempts,
+        chat_id, message_id, message_gone, resend_count, status_reply_id, image_retired)
 
-events(id PK, ts, tg_id NULL, role_at_time, kind TEXT, data JSON)
-  INDEX (ts), INDEX (tg_id, ts), INDEX (kind, ts)
+events(id PK, ts, tg_id NULL, role_at_time, kind, data JSON)
 ```
 
-Event kinds: `interaction`, `denied`, `access_requested`, `ticket_issued`, `ticket_pointed`,
-`ticket_resent`, `ticket_used`, `ticket_expired`, `place_unresolved`, `quota_denied`, `cap_denied`,
-`role_changed`, `quota_changed`, `setting_changed`, `credentials_set`, `credentials_invalid`,
-`api_error`, `foreign_code`, `paused`, `resumed`.
+Migrations: `0000_init`, `0001_ticket_label`.
+
+Event kinds: `interaction`, `denied`, `access_requested`, `access_request_ignored`, `ticket_issued`,
+`ticket_pointed`, `ticket_resent`, `ticket_used`, `ticket_expired`, `place_unresolved`, `quota_denied`,
+`cap_denied`, `role_changed`, `quota_changed`, `locale_changed`, `setting_changed`, `credentials_set`,
+`credentials_cleared`, `credentials_invalid`, `credentials_expiring`, `api_error`, `foreign_code`,
+`paused`, `resumed`, `admin_alert`, `exported`.
 
 ---
 
-## 6. Settings (admin-tunable, with defaults)
-
-Defaults assume a student monthly pass of about 46 trips, i.e. roughly 1.5 per day.
+## 6. Settings (`/settings`, `/set`)
 
 | Key | Default | Meaning |
 |---|---|---|
-| `default_daily_quota` | 2 | Codes per user per Kyiv day |
-| `global_daily_cap` | 6 | Codes per day across everyone |
-| `reserve_trips` | 4 | Never generate if the monthly balance is ≤ this (kept for the owner) |
-| `low_balance_alert` | 8 | Alert admins once a day when the balance is ≤ this |
-| `active_card_id` | — (picked at credential setup) | Which travel card to use |
-| `poll_interval_sec` | 30 | Tracker cadence while tickets are active |
-| `place_match_window_sec` | 120 | Max `used_at` ↔ feed `created_at` gap |
-| `api_rate_per_min` | 20 | Self-imposed Kyiv API limit |
-| `request_cooldown_hours` | 24 | Delay before an ignored guest can `/request` again |
-| `log_retention_days` | 365 | Prune `events` after this many days |
-| `paused` | false | Kill switch |
+| `default_daily_quota` | 2 | Tickets per user per Kyiv day |
+| `global_daily_cap` | 6 | Tickets per day for everyone |
+| `reserve_trips` | 4 | Stop issuing at this many trips or fewer |
+| `low_balance_alert` | 8 | Alert admins at this many trips or fewer |
+| `active_card_id` | — | Set via `/card` or credential setup |
+| `poll_interval_sec` | 30 | Tracker cadence |
+| `place_match_window_sec` | 120 | Max gap between `used_at` and the feed event |
+| `api_rate_per_min` | 20 | Self-imposed Kyiv Digital limit |
+| `request_cooldown_hours` | 24 | Wait before another `/request` after an ignore |
+| `log_retention_days` | 365 | Event pruning |
+| `paused` | false | Set via `/pause`, `/resume` |
+
+Environment: see README (`BOT_TOKEN`, `ADMIN_IDS`, `ENCRYPTION_KEY`, `KYIV_CLIENT_AUTH`, `DB_PATH`,
+`BACKUP_DIR`, `BACKUP_KEEP`, `HEALTH_PORT`, `LOG_LEVEL`, `KYIV_BASE_URL`, `DEV_MODE`, `TELEGRAM_TEST_ENV`).
 
 ---
 
 ## 7. Telegram UI
 
-Private chats only. Each role gets its own command menu via `setMyCommands` (with per-chat scope
-for users and admins, and both `uk` and `en` `language_code` variants), refreshed whenever a role changes.
-Users get a persistent reply keyboard with a single **🎫 QR** button.
+Private chats only; per-role command menus in the user's language; a 🎫 QR reply keyboard for users and admins.
 
-**Everyone:** `/start`, `/help`, `/whoami`, `/lang uk|en`
-**Guest:** `/request`
-**User:** `/qr` (🎫), `/status` (today's n/quota + replies to the active ticket message, if any), `/history` (your last 10 tickets: date, outcome, time used, 🚇 mode + place)
-**Admin:**
-| Command | Behaviour |
-|---|---|
-| `/users` | Paged inline list → user card with [User] [Admin] [Guest] [Ban] [Quota…] [Stats] [Logs] |
-| `/requests` | Pending access requests with Grant/Ban/Ignore buttons |
-| `/grant <id\|@user> [user\|admin]`, `/revoke <id>`, `/quota <id> <n\|default>` | Text shortcuts |
-| `/settings` | Every setting with its current value. `/set <key> <value>` changes one (validated, audited) |
-| `/stats [today\|week\|month]` | Per user: issued / used / expired, top places. Global totals. Card balance |
-| `/logs [id] [n]` | Recent audit events |
-| `/export [tickets\|events] [days]` | CSV document |
-| `/card` | Balance, trips left, credential health, token expiry date |
-| `/credentials [set\|clear]` | Health + masked token / entry conversation |
-| `/pause`, `/resume` | Kill switch |
-
-**Admin alerts:** an access request, credentials invalid or expiring, low balance, repeated API errors, generation blocked by the card.
+- **Everyone:** `/start`, `/help`, `/whoami`, `/lang`
+- **Guests:** `/request`
+- **Users:** `/qr` (🎫), `/status`, `/history`
+- **Admins:** `/users` (card: role, quota, 📊 stats, 📜 log), `/requests`, `/grant`, `/revoke`, `/quota`, `/settings`, `/set`, `/stats [today|week|month|all]`, `/logs [id|@user] [count]`, `/export [tickets|events] [days|all]`, `/card`, `/credentials [set|check|clear]`, `/cancel`, `/pause`, `/resume`
+- **Admins in DEV_MODE:** `/dev clock …`, `/dev tick`
 
 ---
 
 ## 8. Mock Kyiv Digital API (`mock/`)
 
-A stateful fake server that follows `docs/` exactly, so both the UI and the logic can be exercised without a real token.
+The real API's paths and shapes, with strict envelope checks (X-Client-Auth placeholder, Bearer, device binding, no `Content-Type` on generate) and simulated rate-limit headers. State: cards, codes, feed, tokens, clock. Trips are reserved on generate and returned at midnight.
 
-**API surface (the same paths and shapes as the real one):** `GET /api/v4/card/travel`, `GET /api/v4/card/travel/{id}`,
-`GET …/{id}/feed`, `POST …/{id}/qr-ticket`, `GET /api/v4/qr`. It **checks the envelope** (static `X-Client-Auth`, Bearer token,
-device UUID, and *no* `Content-Type` on generate), so client mistakes show up in dev. Rate-limit headers are simulated too.
-
-**State:** cards (balance, monthly tickets, blocked flag), codes, feed events, accepted tokens, and a clock offset.
-Generation decrements the balance and adds a `qrt_` event. It's seeded from fixtures copied from the docs.
-
-**Control plane (`/_mock/*`, JSON) + an HTML panel at `/_mock/`:**
-| Control | Effect |
-|---|---|
-| `POST /_mock/codes/{id}/validate {mode, place, delay_feed_sec?}` | Simulates a scan: sets `used_at` and adds a `val_` event, optionally delayed to test feed lag |
-| `POST /_mock/codes/{id}/expire` | Sets `expire_at` to now, returns the trip, adds an `eqr_` event |
-| `POST /_mock/midnight` | Expires everything unused at once |
-| `POST /_mock/owner-generate` | A code created "from the phone app" (a foreign code) |
-| `POST /_mock/foreign-validation` | A `val_` event with no code (physical card tap), to test matching |
-| `PATCH /_mock/card {balance, blocked, generate_qr}` | Card state |
-| `POST /_mock/faults {status: 401\|423\|429\|503\|shape, count \| rate, latency_ms}` | Fault injection |
-| `POST /_mock/tokens {valid:[…], exp}` | Token validity / an expiring JWT (the mock signs a fake JWT with a chosen `exp`) |
-| `POST /_mock/reset` | Back to the fixtures |
-
-The panel lists active codes with "Scan at [station ▾]" and "Expire" buttons, card state, a fault toggle, and a live request log. You can drive the bot from a phone with one hand and the panel with the other.
-
-**Usage:**
-- **Dev:** `npm run dev:mock` starts the mock on `:8787` and the bot with `KYIV_BASE_URL=http://localhost:8787`. Use a separate dev bot token from @BotFather.
-- **Tests:** vitest starts the mock in-process on an ephemeral port per test file. Scenarios cover quota, the one-active rule, deleted-message re-send, place matching under lag and decoys, 401 handling, the midnight sweep, and concurrent `/qr` from two users (mutex attribution).
-- **Safety:** the bot refuses a non-`https://kyiv.digital` base URL unless `DEV_MODE=true`. With `DEV_MODE` on, a `/dev` admin command shifts the bot's clock, for testing quota day rollover.
+- **Control panel** at `/_mock/` (`/` redirects there). **JSON control plane** under `/_mock/*`: validate (station, feed delay), expire, midnight, clock, owner-generate, physical-card tap, card patch/add, tokens issue/revoke, faults (`401 423 429 500 503 shape timeout drop lost`), latency, reset, state, requests, endpoints.
+- **Runs:** `npm run mock` (alone), `npm run dev:mock` (with the bot, D21), the `mock` Docker target with `compose.dev.yaml`, and in-process in tests.
 
 ---
 
 ## 9. Security
 
-- The token is encrypted at rest (AES-256-GCM, `ENCRYPTION_KEY` env var). It's redacted from logs and masked in the UI.
-- Credential messages are deleted right after reading. Accepted trade-off: bot chats aren't end-to-end encrypted, so the token passes through Telegram's servers.
-- QR messages use `protect_content`. Leaking a code costs at most one trip on one day.
-- Feed personal data is never stored. Only the matched station, mode, and event id are kept.
-- Every admin action is audited along with who performed it. `ADMIN_IDS` can't be revoked from inside the bot.
+- The token is AES-256-GCM encrypted at rest, never logged, masked in the UI; token-shaped messages are deleted (D16). Accepted trade-off: entry passes through Telegram.
+- `X-Client-Auth` lives only in `.env` (D25).
+- QR messages use `protect_content`; exports never include QR payloads; only the matched station and mode are stored from the feed.
+- Every admin action is audited.
 
 ---
 
-## 10. Deployment (single container, ARM-ready)
+## 10. Deployment
 
-- **Dockerfile:** multi-stage on `node:24-bookworm-slim`.
-  - Build stage: `npm ci` (with build tools in case no `better-sqlite3` prebuild is available) → `tsc`.
-  - Runtime stage: prod deps + `dist/` + `drizzle/`, a non-root user, `tini` as PID 1.
-- **Images:** `docker buildx build --platform linux/amd64,linux/arm64`. Targets a Raspberry Pi 4/5 on a **64-bit** OS. 32-bit armv7 isn't a goal.
-- **Volume:** `/data` holds `bot.sqlite` plus `backups/`. A nightly `VACUUM INTO` backup keeps 14 copies.
-- **Env:** `BOT_TOKEN`, `ADMIN_IDS`, `ENCRYPTION_KEY`, `DB_PATH=/data/bot.sqlite`, optional `KYIV_BASE_URL`, `DEV_MODE`, `LOG_LEVEL`.
-- **Healthcheck:** a tiny internal HTTP `/healthz` on localhost reporting the bot-loop heartbeat, DB status, and credential health (not exposed outside the container).
-- `compose.yaml` for production, plus a `compose.dev.yaml` that adds the mock service.
-- Migrations run on startup. SIGTERM shuts things down gracefully (stop polling, stop the tracker, close the DB).
+- Multi-stage Dockerfile: build (with a toolchain fallback), `mock` target, pruned prod deps, non-root runtime with tini, `/data` volume, `HEALTHCHECK` on `127.0.0.1:${HEALTH_PORT}/healthz`.
+- `compose.yaml` (one service, `env_file: .env`, log rotation); `compose.dev.yaml` (production image + mock).
+- Nightly `VACUUM INTO` backups to `/data/backups`, keeping 14. Migrations on startup; graceful SIGTERM.
+- Image: 416 MB uncompressed (mostly the Node runtime).
 
 ---
 
@@ -307,32 +285,36 @@ The panel lists active codes with "Scan at [station ▾]" and "Expire" buttons, 
 
 ```
 src/
-  main.ts
-  core/      config.ts clock.ts crypto.ts logger.ts mutex.ts health.ts
-  db/        schema.ts client.ts migrate.ts repos/*.ts
-  kyiv/      client.ts envelope.ts schemas.ts rate-limit.ts errors.ts
-  services/  access.ts tickets.ts tracker.ts place.ts ticket-view.ts credentials.ts settings.ts audit.ts notifier.ts
-  bot/       bot.ts middleware/*.ts commands/{public,user,admin,dev}/*.ts conversations/*.ts keyboards.ts
-  i18n/      uk.ts en.ts index.ts
-  qr/        render.ts assets/{used,expired}.png
-mock/        server.ts state.ts fixtures.ts jwt.ts control.ts panel.html
-drizzle/     migrations
-test/        helpers/ (mock bootstrap, telegram recorder, fake clock)  *.test.ts
-Dockerfile  compose.yaml  compose.dev.yaml  .env.example  README.md
+  main.ts  jobs.ts
+  core/      config clock crypto csv backup health html logger mutex
+  db/        schema client
+  kyiv/      client envelope schemas rate-limit errors
+  services/  index access audit credentials settings tickets places tracker stats
+  bot/       bot context deps menus keyboards notifier alerts role-effects ticket-view kyiv-errors
+             middleware/core  commands/{public,user-tickets,admin-users,admin-credentials,admin-card,admin-reports,fallback,dev}
+  i18n/      uk en index
+  qr/        render placeholder
+mock/        server state fixtures jwt main dev panel.html
+drizzle/     0000_init 0001_ticket_label
+test/        helpers/{services,telegram,telegram-html,kyiv,ticket-env}  *.test.ts
+Dockerfile  compose.yaml  compose.dev.yaml  .env.example  README.md  PLAN.md  docs/
 ```
 
 ---
 
-## 12. Build phases
+## 12. Next: phase 8, the live smoke test
 
-1. **Foundation:** repo scaffolding, config, DB + migrations, i18n skeleton, bot with roles, audit middleware, `/start` `/help` `/whoami` `/lang` `/request`, admin user management.
-2. **Mock API + KyivClient:** mock server, fixtures, and control plane (no panel yet). Client with envelope, limiter, errors. Contract tests of the client against the mock.
-3. **Credentials + card:** `/credentials` conversation, encryption, health, `/card`.
-4. **Tickets:** TicketService + TicketView (`/qr`, quotas, safeguards, mutex, reply-to / re-send).
-5. **Tracking:** tracker, PlaceResolver, message edits, midnight sweep, startup reconciliation.
-6. **Admin reporting:** `/stats` `/logs` `/export` `/settings` `/pause`, alerts. (The mock control panel was moved earlier and shipped after phase 4.)
-7. **Ship:** Dockerfile (multi-arch), compose files, backups, healthcheck, README/runbook.
-8. **Live smoke test** against the real API with your token (read-only first, then one real generate).
+On the target box (residential connection), with the real account:
 
-## 13. Remaining open points
-None. The design is ready to build, starting with phase 1.
+1. `cp .env.example .env` and fill it in, **including `KYIV_CLIENT_AUTH`**. Then `docker compose up -d --build` (the first arm64 build).
+2. `/credentials set`, then `/card`.
+3. `/qr` once. This reserves a real trip; if unused, it returns at midnight.
+4. Scan it (uses the trip) or let it expire. Check the reply, the place, how long the feed takes, and the image swap after midnight.
+5. `docker ps` shows `healthy`, and a backup appears after 04:00.
+6. Feed back any differences (error codes, feed lag, response fields) into the client, the mock and these docs.
+
+### Open items
+- arm64 image build (happens on the Pi, or with QEMU on the dev host).
+- Tune `place_match_window_sec` and the place-attempt budget once real feed lag is known.
+- Restore drill from a backup.
+- `npm audit`: a moderate advisory in drizzle-kit's bundled esbuild (dev-only, not in the image).

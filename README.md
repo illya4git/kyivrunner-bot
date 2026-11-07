@@ -3,7 +3,8 @@
 A Telegram bot that hands out Kyiv Digital transit QR tickets from **one** personal account to an
 admin-approved group, without sharing the account's credentials.
 
-- Design and decisions: [PLAN.md](PLAN.md)
+- Repository: https://github.com/illya4git/kyivrunner-bot
+- Design, decisions and status: [PLAN.md](PLAN.md)
 - Kyiv Digital API reference: [docs/](docs/README.md)
 
 ## How it works
@@ -28,11 +29,12 @@ Runs as one container with one volume on `linux/amd64` and `linux/arm64` (Raspbe
 **residential Ukrainian connection**: Kyiv Digital treats datacenter/VPN traffic as a risk signal.
 
 ```bash
-git clone <this repo> kyivrunner-bot && cd kyivrunner-bot
+git clone https://github.com/illya4git/kyivrunner-bot.git && cd kyivrunner-bot
 cp .env.example .env
-#   BOT_TOKEN       from @BotFather
-#   ADMIN_IDS       your Telegram user id (comma-separated for several)
-#   ENCRYPTION_KEY  openssl rand -base64 32   ← keep a copy somewhere safe
+#   BOT_TOKEN         from @BotFather
+#   ADMIN_IDS         your Telegram user id (comma-separated for several)
+#   ENCRYPTION_KEY    openssl rand -base64 32   ← keep a copy somewhere safe
+#   KYIV_CLIENT_AUTH  the app's static X-Client-Auth value (not in this repo)
 docker compose up -d --build
 docker compose logs -f bot
 ```
@@ -66,6 +68,7 @@ Environment (`.env`):
 | `BACKUP_KEEP` | `14` | Backups to keep |
 | `HEALTH_PORT` | `8080` | Local `GET /healthz` for the container healthcheck (`0` disables it) |
 | `LOG_LEVEL` | `info` | `debug` shows every Kyiv Digital request with status and timing |
+| `KYIV_CLIENT_AUTH` | — | The Kyiv Digital app's static `X-Client-Auth` header (64 hex chars). Required for the real API; deliberately not in this repository |
 | `KYIV_BASE_URL` | `https://kyiv.digital` | Anything else requires `DEV_MODE=true` |
 | `DEV_MODE` | `false` | Enables `/dev` and non-production API URLs |
 | `TELEGRAM_TEST_ENV` | `false` | Use Telegram's separate test servers |
