@@ -17,6 +17,8 @@ export const SETTINGS = {
   low_balance_alert: { schema: int(0, 1000), default: 8 },
   active_card_id: { schema: z.coerce.number().int().positive().nullable(), default: null },
   poll_interval_sec: { schema: int(5, 3600), default: 30 },
+  poll_idle_interval_sec: { schema: int(5, 3600), default: 300 },
+  poll_fresh_window_min: { schema: int(0, 1440), default: 15 },
   place_match_window_sec: { schema: int(5, 3600), default: 120 },
   api_rate_per_min: { schema: int(1, 60), default: 20 },
   request_cooldown_hours: { schema: int(0, 24 * 365), default: 24 },

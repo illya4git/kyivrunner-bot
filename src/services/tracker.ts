@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import type { Clock } from '../core/clock.js';
 import type { Logger } from '../core/logger.js';
 import { isKyivError } from '../kyiv/errors.js';
 import type { AuditService } from './audit.js';
@@ -25,9 +26,16 @@ export type TrackerEvents = {
  *  3. retries the place lookup for used tickets still missing one.
  * Idle passes cost nothing: no API call is made unless something is active or pending.
  * The first pass runs at start, which reconciles anything that changed while the bot was down.
+ *
+ * Cadence: `poll_interval_sec` while a ticket issued within the last `poll_fresh_window_min`
+ * is still unused, or a place lookup is pending; otherwise `poll_idle_interval_sec`. An older
+ * unused ticket is rarely scanned, and the user can always press 🔄 or send /status. Issuing a
+ * ticket wakes a sleeping tracker into the fast cadence. Failure backoff is added on top.
  */
 export class TicketTracker extends EventEmitter<TrackerEvents> {
   private timer: NodeJS.Timeout | null = null;
+  /** When the scheduled pass fires (ms, real time). */
+  private dueAt = 0;
   private stopped = true;
   private running: Promise<void> | null = null;
   private backoffMs = 0;
@@ -42,9 +50,11 @@ export class TicketTracker extends EventEmitter<TrackerEvents> {
     private readonly credentials: CredentialService,
     private readonly settings: SettingsService,
     private readonly audit: AuditService,
+    private readonly clock: Clock,
     private readonly log: Logger,
   ) {
     super();
+    tickets.on('issued', () => this.wake());
   }
 
   start(): void {
@@ -68,10 +78,47 @@ export class TicketTracker extends EventEmitter<TrackerEvents> {
     return this.running;
   }
 
+  /** Is there something worth the fast cadence: a fresh unused ticket or a pending place? */
+  isBusy(): boolean {
+    const windowMs = this.settings.get('poll_fresh_window_min') * 60_000;
+    return this.tickets.hasActiveIssuedSince(this.clock.now() - windowMs) || this.tickets.pendingPlaces().length > 0;
+  }
+
+  /** When the next scheduled pass fires (ms, real time), or null when none is scheduled. */
+  get nextPassAt(): number | null {
+    return this.timer ? this.dueAt : null;
+  }
+
+  /**
+   * Liveness for /healthz: a pass ended within the longest gap the settings allow
+   * (the slower cadence plus maximum backoff), with 5 minutes of slack.
+   */
+  isLive(now = Date.now()): boolean {
+    if (this.lastPassAt === null) return false;
+    const cadenceMs = Math.max(this.settings.get('poll_interval_sec'), this.settings.get('poll_idle_interval_sec')) * 1000;
+    return now - this.lastPassAt < cadenceMs + MAX_BACKOFF_MS + 5 * 60_000;
+  }
+
+  /** Delay until the next pass. */
+  nextDelayMs(): number {
+    const key = this.isBusy() ? 'poll_interval_sec' : 'poll_idle_interval_sec';
+    return this.settings.get(key) * 1000 + this.backoffMs;
+  }
+
+  /** Bring a pass sleeping on the idle cadence forward to the fast one (not during backoff). */
+  private wake(): void {
+    if (this.stopped || !this.timer || this.backoffMs > 0) return;
+    const fastMs = this.settings.get('poll_interval_sec') * 1000;
+    if (this.dueAt - Date.now() > fastMs) this.schedule(fastMs);
+  }
+
   private schedule(ms: number): void {
+    if (this.timer) clearTimeout(this.timer);
+    this.dueAt = Date.now() + ms;
     this.timer = setTimeout(async () => {
+      this.timer = null;
       await this.tick();
-      if (!this.stopped) this.schedule(this.settings.get('poll_interval_sec') * 1000 + this.backoffMs);
+      if (!this.stopped) this.schedule(this.nextDelayMs());
     }, ms);
   }
 

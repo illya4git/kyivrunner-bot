@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { and, count, desc, eq, gt, inArray, isNull, lt, lte } from 'drizzle-orm';
+import { and, count, desc, eq, gt, gte, inArray, isNull, lt, lte } from 'drizzle-orm';
 import { kyivDay, type Clock } from '../core/clock.js';
 import type { Logger } from '../core/logger.js';
 import { Mutex } from '../core/mutex.js';
@@ -58,6 +58,8 @@ export type TicketEvents = {
   lowBalance: [{ trips: number }];
   /** The card refuses QR generation (blocked / locked / generate_qr off). */
   generationBlocked: [];
+  /** A new ticket was issued (the tracker switches to its fast cadence). */
+  issued: [TicketRow];
 };
 
 export class TicketService extends EventEmitter<TicketEvents> {
@@ -127,6 +129,18 @@ export class TicketService extends EventEmitter<TicketEvents> {
 
   hasActive(): boolean {
     return this.db.select({ id: tickets.id }).from(tickets).where(eq(tickets.status, 'active')).limit(1).get() !== undefined;
+  }
+
+  /** Is any ticket still active that was issued at or after `sinceMs`? */
+  hasActiveIssuedSince(sinceMs: number): boolean {
+    return (
+      this.db
+        .select({ id: tickets.id })
+        .from(tickets)
+        .where(and(eq(tickets.status, 'active'), gte(tickets.issuedAt, sinceMs)))
+        .limit(1)
+        .get() !== undefined
+    );
   }
 
   /** Used tickets whose place is still being looked up. */
@@ -248,6 +262,7 @@ export class TicketService extends EventEmitter<TicketEvents> {
     this.audit.log({ kind: 'ticket_issued', tgId: user.tgId, role: user.role, data: { ticket: ticket.id, kd: code.id, card: code.card_id } });
     const tripsAfter = tripsLeft(card) - 1;
     if (tripsAfter <= this.settings.get('low_balance_alert')) this.emit('lowBalance', { trips: tripsAfter });
+    this.emit('issued', ticket);
     return { kind: 'issued', ticket, quota: { used: quota.used + 1, limit: quota.limit } };
   }
 

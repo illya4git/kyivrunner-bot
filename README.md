@@ -94,7 +94,7 @@ every ticket and status change) is in the `events` table: read it with `/logs` o
 Events older than `log_retention_days` (365) are pruned nightly at 03:30 Kyiv time.
 
 **Health.** `docker ps` shows `healthy` when the bot is polling Telegram and the background tracker
-has run within the last 10 minutes. A rejected token does not make it unhealthy, since a restart
+has run recently (within 15 minutes by default; the limit grows with `poll_idle_interval_sec`). A rejected token does not make it unhealthy, since a restart
 wouldn't help; admins get an alert instead.
 
 **Backups.** Every night at 04:00 Kyiv time a consistent copy goes to

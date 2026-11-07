@@ -68,8 +68,9 @@ Operations: [README.md](README.md)
 | D24 | **`/logs [user] [count]`** arguments are positional. Interactions are hidden unless a user is given. |
 | D25 | The app's static **`X-Client-Auth` is not in the repository.** It comes from `KYIV_CLIENT_AUTH` (required for the real API); the mock uses a placeholder. The repo is public, the value was scrubbed from all history before the first push, and commits use the GitHub no-reply address. |
 | D26 | Compose keeps secrets in **`.env` via `env_file`**, without listing variables in the compose file. |
-| D27 | **Health** = polling Telegram and a tracker pass within the last 10 minutes. Credential problems are reported, but don't fail the check (a restart wouldn't fix them). |
+| D27 | **Health** = polling Telegram and a recent tracker pass (within the slower poll interval + max backoff + 5 min: 15 min by default). Credential problems are reported, but don't fail the check (a restart wouldn't fix them). |
 | D28 | `TELEGRAM_TEST_ENV` switches to Telegram's test servers. The fake Telegram in tests validates HTML the way Telegram does. |
+| D29 | **Adaptive polling:** fast (30s) only while a ticket issued in the last 15 min is unused or a place is pending; otherwise 5 min. Most codes are scanned soon after issue; for an older one the user can press 🔄 or send /status, and expiry is reported within 5 min of midnight. Issuing wakes the tracker. All three values are settings. |
 
 ---
 
@@ -179,7 +180,7 @@ Rules:
 | Message deleted | Mark it gone; notify with a standalone text message |
 
 ### Tracking (TicketTracker)
-Every `poll_interval_sec` (30s), plus 30s–5min of backoff after Kyiv Digital failures:
+Every `poll_interval_sec` (30s) while a ticket issued within `poll_fresh_window_min` (15) is unused or a place lookup is pending, otherwise every `poll_idle_interval_sec` (5 min). Issuing a ticket wakes the tracker into the fast cadence; 30s–5min of backoff is added after Kyiv Digital failures:
 1. Retire used images past midnight (DB only).
 2. If anything is active: list codes under the issuing lock → transitions; log foreign codes once.
 3. Retry pending place lookups.
@@ -230,7 +231,9 @@ Event kinds: `interaction`, `denied`, `access_requested`, `access_request_ignore
 | `reserve_trips` | 4 | Stop issuing at this many trips or fewer |
 | `low_balance_alert` | 8 | Alert admins at this many trips or fewer |
 | `active_card_id` | — | Set via `/card` or credential setup |
-| `poll_interval_sec` | 30 | Tracker cadence |
+| `poll_interval_sec` | 30 | Tracker cadence for fresh tickets and pending places |
+| `poll_idle_interval_sec` | 300 | Tracker cadence otherwise |
+| `poll_fresh_window_min` | 15 | How long after issue an unused ticket keeps the fast cadence |
 | `place_match_window_sec` | 120 | Max gap between `used_at` and the feed event |
 | `api_rate_per_min` | 20 | Self-imposed Kyiv Digital limit |
 | `request_cooldown_hours` | 24 | Wait before another `/request` after an ignore |

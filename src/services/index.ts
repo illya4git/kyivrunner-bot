@@ -46,7 +46,7 @@ export function buildServices(c: ServiceConfig): Services {
 
   const places = new PlaceResolver(c.db, kyiv, settings, audit, c.log.child({ mod: 'places' }));
   const tickets = new TicketService(c.db, c.clock, audit, settings, access, credentials, kyiv, places, c.log.child({ mod: 'tickets' }));
-  const tracker = new TicketTracker(tickets, credentials, settings, audit, c.log.child({ mod: 'tracker' }));
+  const tracker = new TicketTracker(tickets, credentials, settings, audit, c.clock, c.log.child({ mod: 'tracker' }));
 
   const stats = new StatsService(c.db, c.clock);
 

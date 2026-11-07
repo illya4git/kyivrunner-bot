@@ -31,15 +31,15 @@ async function main(): Promise<void> {
   });
   const jobs = startJobs(deps, { db, backupDir: config.backupDir, backupKeep: config.backupKeep });
 
-  // Healthy = polling Telegram, DB answering, tracker passes recent (it runs every
-  // poll interval even when idle; 10 min also covers the max outage backoff).
+  // Healthy = polling Telegram, DB answering, tracker passes recent (it runs even when idle;
+  // the allowed gap follows the poll settings and the max outage backoff).
   // Credential problems are reported but don't fail the check: a restart wouldn't fix them.
   const health =
     config.healthPort > 0
       ? await startHealthServer(config.healthPort, () => {
           db.$client.prepare('SELECT 1').get();
           const last = services.tracker.lastPassAt;
-          const trackerOk = last !== null && Date.now() - last < 10 * 60_000;
+          const trackerOk = services.tracker.isLive();
           return {
             ok: bot.isRunning() && trackerOk,
             polling: bot.isRunning(),

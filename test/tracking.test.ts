@@ -172,6 +172,55 @@ describe('TicketTracker', () => {
     expect(s.tickets.get(ticket.id)?.status).toBe('used');
   });
 
+  it('polls fast only while a fresh ticket is unused or a place is pending', async () => {
+    const s = await ticketEnv();
+    expect(s.tracker.nextDelayMs()).toBe(300 * SEC); // nothing to watch
+    const { ticket } = await issued(s);
+    expect(s.tracker.nextDelayMs()).toBe(30 * SEC);
+    s.clock.advance(15 * 60 * SEC);
+    expect(s.tracker.nextDelayMs()).toBe(30 * SEC); // still within the window
+    s.clock.advance(SEC);
+    expect(s.tracker.nextDelayMs()).toBe(300 * SEC); // unused but stale
+
+    s.state.validate(ticket.kdTicketId, { feedDelaySec: 3600 }); // place won't show up yet
+    await s.tracker.tick();
+    expect(s.tickets.get(ticket.id)?.status).toBe('used');
+    expect(s.tracker.nextDelayMs()).toBe(30 * SEC); // place lookup pending
+    s.clock.advance(3600 * SEC);
+    s.state.advance(3600);
+    await s.tracker.tick();
+    expect(s.tickets.get(ticket.id)?.place).not.toBeNull();
+    expect(s.tracker.nextDelayMs()).toBe(300 * SEC);
+
+    s.settings.set('poll_idle_interval_sec', 120, ADMIN_ID);
+    expect(s.tracker.nextDelayMs()).toBe(120 * SEC);
+  });
+
+  it('counts as live for the idle cadence plus max backoff, with slack', async () => {
+    const s = await ticketEnv();
+    expect(s.tracker.isLive()).toBe(false); // no pass yet
+    await s.tracker.tick();
+    const at = s.tracker.lastPassAt!;
+    expect(s.tracker.isLive(at + 14 * 60 * SEC)).toBe(true); // 5 min idle + 5 backoff + 5 slack
+    expect(s.tracker.isLive(at + 16 * 60 * SEC)).toBe(false);
+    s.settings.set('poll_idle_interval_sec', 3600, ADMIN_ID);
+    expect(s.tracker.isLive(at + 69 * 60 * SEC)).toBe(true);
+  });
+
+  it('wakes from the idle cadence when a ticket is issued', async () => {
+    const s = await ticketEnv();
+    s.tracker.start();
+    try {
+      // the first pass runs at once, then reschedules
+      for (let i = 0; i < 50 && (s.tracker.nextPassAt ?? 0) - Date.now() < SEC; i++) await new Promise((r) => setTimeout(r, 20));
+      expect(s.tracker.nextPassAt! - Date.now()).toBeGreaterThan(200 * SEC);
+      await issued(s);
+      expect(s.tracker.nextPassAt! - Date.now()).toBeLessThanOrEqual(30 * SEC);
+    } finally {
+      s.tracker.stop();
+    }
+  });
+
   it('stops polling with rejected credentials', async () => {
     const s = await ticketEnv();
     await issued(s);
