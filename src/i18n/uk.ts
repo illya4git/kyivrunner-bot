@@ -232,10 +232,13 @@ export const uk = {
       `✅ <b>${esc(p.label)}</b> — використано о ${esc(p.time)}` +
       (p.place ? `\n📍 ${esc(p.place)}` : '') +
       `\n\nПокажіть цей QR контролеру, якщо попросять (до ${esc(p.until)}).`,
+    captionUsedFinal: (p: { label: string; date: string; time: string; place?: string | undefined }) =>
+      `✅ <b>${esc(p.label)}</b> — використано ${esc(p.date)} о ${esc(p.time)}` + (p.place ? `\n📍 ${esc(p.place)}` : ''),
     captionExpired: (p: { label: string; date: string }) =>
       `⌛ <b>${esc(p.label)}</b> — не використано (${esc(p.date)}).\nПоїздка повернулася на картку.`,
     pointer: (until: string, quota: string) => `⬆️ Ваш активний QR-квиток — вище. Дійсний до ${esc(until)}.\n${quota}`,
     pointerUsed: (time: string, quota: string) => `⬆️ Ваш квиток використано о ${esc(time)}. Його можна показати контролеру.\n${quota}`,
+    placePending: 'визначаю місце…',
     quotaLine: (used: number, limit: number) => `Сьогодні: ${used}/${limit}.`,
     usedReply: (time: string, place?: string) => `✅ Ваш QR-квиток використано о ${esc(time)}${place ? ` — ${esc(place)}` : ''}.`,
     expiredReply: '⌛ Ваш QR-квиток сплив невикористаним. Поїздка повернулася на картку.',

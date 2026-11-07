@@ -21,8 +21,8 @@ export const TEST_KEY = Buffer.alloc(32, 7);
  * The real service graph over an in-memory DB. `kyivUrl` defaults to an address nothing
  * listens on, so tests that don't start the mock fail fast if they touch the API.
  */
-export function makeServices(opts: { adminIds?: number[]; kyivUrl?: string; clock?: FakeClock } = {}) {
-  const clock = opts.clock ?? new FakeClock();
+export function makeServices<C extends Clock = FakeClock>(opts: { adminIds?: number[]; kyivUrl?: string; clock?: C } = {}) {
+  const clock = (opts.clock ?? new FakeClock()) as C;
   const db = openDb(':memory:');
   const services = buildServices({
     db,

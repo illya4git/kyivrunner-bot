@@ -142,7 +142,7 @@ Each status change is always an edit **plus** a reply. Telegram doesn't notify o
 ### Tracking (TicketTracker)
 - Runs only while active tickets exist: `GET /api/v4/qr` every `poll_interval_sec` (default 30s).
 - `used_at` set → status `used` → PlaceResolver → TicketView edit.
-- `expire_at` passed → status `expired`. A cron at 00:01 Kyiv time also sweeps for these.
+- `expire_at` passed → status `expired`. No separate midnight cron: the tracker pass handles expiry and image retirement within one poll interval of midnight. Retirement is a DB-only check, so idle passes cost no API calls.
 - Codes the bot didn't issue (the owner using the app) → a `foreign_code` event, otherwise ignored.
 - On startup, every `active` row is reconciled.
 

@@ -1,5 +1,5 @@
 import { loadConfig } from './core/config.js';
-import { OffsetClock } from './core/clock.js';
+import { processClock } from './core/clock.js';
 import { createLogger } from './core/logger.js';
 import { openDb } from './db/client.js';
 import { buildServices } from './services/index.js';
@@ -9,7 +9,7 @@ import { createBot } from './bot/bot.js';
 async function main(): Promise<void> {
   const config = loadConfig();
   const log = createLogger(config.logLevel);
-  const clock = new OffsetClock();
+  const clock = processClock;
 
   const db = openDb(config.dbPath);
   const services = buildServices({

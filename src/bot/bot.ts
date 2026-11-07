@@ -16,6 +16,7 @@ import { adminCardCommands } from './commands/admin-card.js';
 import { wireAlerts } from './alerts.js';
 import { TicketView } from './ticket-view.js';
 import { userTicketCommands } from './commands/user-tickets.js';
+import { devCommands } from './commands/dev.js';
 
 export type CreateBotOptions = {
   token: string;
@@ -64,7 +65,7 @@ export function createBot(opts: CreateBotOptions): { bot: Bot<BotContext>; deps:
     ticketView: new TicketView(bot.api, opts.services.tickets, opts.services.access, opts.services.audit, opts.services.log),
     devMode: opts.devMode,
   };
-  opts.services.tickets.setSink((tr) => deps.ticketView.applyTransition(tr));
+  opts.services.tickets.setPresenter(deps.ticketView);
 
   const creds = credentialFlows(deps);
   bot.use(coreMiddleware(deps));
@@ -79,6 +80,7 @@ export function createBot(opts: CreateBotOptions): { bot: Bot<BotContext>; deps:
   admins.use(adminUserCommands(deps));
   admins.use(creds.commands);
   admins.use(adminCardCommands(deps));
+  if (opts.devMode) admins.use(devCommands(deps));
   admins.use(placeholders(ADMIN_PLACEHOLDERS));
 
   bot.use(fallback(deps));

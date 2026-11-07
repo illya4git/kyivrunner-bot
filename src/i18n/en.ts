@@ -199,9 +199,11 @@ export const en: Messages = {
       `✅ <b>${esc(p.label)}</b> — used at ${esc(p.time)}` +
       (p.place ? `\n📍 ${esc(p.place)}` : '') +
       `\n\nShow this QR to a conductor if asked (until ${esc(p.until)}).`,
+    captionUsedFinal: (p) => `✅ <b>${esc(p.label)}</b> — used ${esc(p.date)} at ${esc(p.time)}` + (p.place ? `\n📍 ${esc(p.place)}` : ''),
     captionExpired: (p) => `⌛ <b>${esc(p.label)}</b> — not used (${esc(p.date)}).\nThe trip went back to the card.`,
     pointer: (until, quota) => `⬆️ Your active QR ticket is above. Valid until ${esc(until)}.\n${quota}`,
     pointerUsed: (time, quota) => `⬆️ Your ticket was used at ${esc(time)}. You can show it to a conductor.\n${quota}`,
+    placePending: 'finding the place…',
     quotaLine: (used, limit) => `Today: ${used}/${limit}.`,
     usedReply: (time, place) => `✅ Your QR ticket was used at ${esc(time)}${place ? ` — ${esc(place)}` : ''}.`,
     expiredReply: '⌛ Your QR ticket expired unused. The trip went back to the card.',

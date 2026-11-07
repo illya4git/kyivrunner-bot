@@ -9,6 +9,7 @@ import type { SettingsService } from '../services/settings.js';
 import type { CredentialService } from '../services/credentials.js';
 import type { KyivClient } from '../kyiv/client.js';
 import type { TicketService } from '../services/tickets.js';
+import type { TicketTracker } from '../services/tracker.js';
 
 export type Services = {
   clock: Clock;
@@ -19,6 +20,7 @@ export type Services = {
   credentials: CredentialService;
   kyiv: KyivClient;
   tickets: TicketService;
+  tracker: TicketTracker;
 };
 
 /** Per-update context. `user` and `t` are set by the loadUser middleware before any handler runs. */

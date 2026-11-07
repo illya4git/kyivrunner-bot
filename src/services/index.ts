@@ -8,6 +8,8 @@ import { AuditService } from './audit.js';
 import { CredentialService } from './credentials.js';
 import { SettingsService } from './settings.js';
 import { TicketService } from './tickets.js';
+import { PlaceResolver } from './places.js';
+import { TicketTracker } from './tracker.js';
 
 export type ServiceConfig = {
   db: Db;
@@ -39,8 +41,10 @@ export function buildServices(c: ServiceConfig): Services {
   });
   credentials = new CredentialService(c.db, c.clock, audit, c.encryptionKey, c.log, async (creds) => (await kyiv.listCards(creds)).cards);
 
-  const tickets = new TicketService(c.db, c.clock, audit, settings, access, credentials, kyiv, c.log.child({ mod: 'tickets' }));
+  const places = new PlaceResolver(c.db, kyiv, settings, audit, c.log.child({ mod: 'places' }));
+  const tickets = new TicketService(c.db, c.clock, audit, settings, access, credentials, kyiv, places, c.log.child({ mod: 'tickets' }));
+  const tracker = new TicketTracker(tickets, credentials, settings, audit, c.log.child({ mod: 'tracker' }));
 
   access.ensureBootstrapAdmins();
-  return { clock: c.clock, log: c.log, settings, audit, access, credentials, kyiv, tickets };
+  return { clock: c.clock, log: c.log, settings, audit, access, credentials, kyiv, tickets, tracker };
 }

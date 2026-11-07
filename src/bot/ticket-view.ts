@@ -7,7 +7,8 @@ import { placeholderPng } from '../qr/placeholder.js';
 import { renderQr } from '../qr/render.js';
 import type { AccessService } from '../services/access.js';
 import type { AuditService } from '../services/audit.js';
-import type { Quota, TicketService, TicketTransition } from '../services/tickets.js';
+import { placePending } from '../services/places.js';
+import type { Quota, TicketPresenter, TicketService, TicketTransition } from '../services/tickets.js';
 
 const REPLY_TARGET_GONE = /message to be replied not found|replied message not found/i;
 const EDIT_TARGET_GONE = /message to edit not found|message can't be edited|MESSAGE_ID_INVALID/i;
@@ -21,7 +22,7 @@ const NO_BUTTONS = { inline_keyboard: [] };
  *  - status changes edit that message AND reply to it (edits alone don't notify);
  *  - "used" keeps the QR image (conductors may re-scan); "expired" swaps in a placeholder.
  */
-export class TicketView {
+export class TicketView implements TicketPresenter {
   constructor(
     private readonly api: Api<RawApi>,
     private readonly tickets: TicketService,
@@ -46,7 +47,7 @@ export class TicketView {
         caption: t.tickets.captionUsed({
           label: this.label(ticket),
           time: kyivTime(ticket.usedAt ?? ticket.issuedAt),
-          place: placeText(ticket),
+          place: placeOrPending(t, ticket),
           until,
           resent: opts.resent ?? false,
         }),
@@ -107,7 +108,7 @@ export class TicketView {
   }
 
   /** Render a status change: edit the ticket message, then reply to it for a notification. */
-  async applyTransition(tr: TicketTransition): Promise<void> {
+  async transition(tr: TicketTransition): Promise<void> {
     const { ticket } = tr;
     const t = this.t(ticket.userTgId);
 
@@ -117,14 +118,63 @@ export class TicketView {
       if (!edited) this.tickets.markMessageGone(ticket.id);
     }
 
-    const text =
-      tr.to === 'used' ? t.tickets.usedReply(kyivTime(ticket.usedAt ?? ticket.issuedAt), placeText(ticket)) : t.tickets.expiredReply;
+    const text = tr.to === 'used' ? this.usedReply(t, ticket) : t.tickets.expiredReply;
     const reply = await this.api.sendMessage(
       ticket.userTgId,
       text,
       edited ? { reply_parameters: { message_id: ticket.messageId!, allow_sending_without_reply: true } } : {},
     );
     this.tickets.setStatusReply(ticket.id, reply.message_id);
+  }
+
+  /** The place lookup finished (found or gave up): refresh the caption and the status reply. */
+  async placeUpdated(ticket: TicketRow): Promise<void> {
+    const t = this.t(ticket.userTgId);
+    if (ticket.chatId !== null && ticket.messageId !== null && !ticket.messageGone) {
+      const caption = ticket.imageRetired ? this.finalCaption(t, ticket) : this.present(t, ticket).caption;
+      const ok = await this.quietEdit(() => this.api.editMessageCaption(ticket.chatId!, ticket.messageId!, { caption, reply_markup: NO_BUTTONS }));
+      if (!ok) this.tickets.markMessageGone(ticket.id);
+    }
+    if (ticket.statusReplyId !== null) {
+      await this.quietEdit(() => this.api.editMessageText(ticket.userTgId, ticket.statusReplyId!, this.usedReply(t, ticket)));
+    }
+  }
+
+  /** After midnight a used QR is worthless: swap it for the placeholder, without notifying. */
+  async retireImage(ticket: TicketRow): Promise<void> {
+    if (ticket.chatId === null || ticket.messageId === null || ticket.messageGone) return;
+    const t = this.t(ticket.userTgId);
+    const ok = await this.quietEdit(() =>
+      this.api.editMessageMedia(
+        ticket.chatId!,
+        ticket.messageId!,
+        { type: 'photo', media: new InputFile(placeholderPng('used'), 'used.png'), caption: this.finalCaption(t, ticket), parse_mode: 'HTML' },
+        { reply_markup: NO_BUTTONS },
+      ),
+    );
+    if (!ok) this.tickets.markMessageGone(ticket.id);
+  }
+
+  private usedReply(t: Messages, ticket: TicketRow): string {
+    return t.tickets.usedReply(kyivTime(ticket.usedAt ?? ticket.issuedAt), placeOrPending(t, ticket));
+  }
+
+  private finalCaption(t: Messages, ticket: TicketRow): string {
+    const at = ticket.usedAt ?? ticket.issuedAt;
+    return t.tickets.captionUsedFinal({ label: this.label(ticket), date: kyivDate(at), time: kyivTime(at), place: placeText(ticket) });
+  }
+
+  /** Run an edit; "not modified" counts as success. Returns false only if the message is gone. */
+  private async quietEdit(fn: () => Promise<unknown>): Promise<boolean> {
+    try {
+      await fn();
+      return true;
+    } catch (err) {
+      if (isTelegramError(err, NOT_MODIFIED)) return true;
+      if (isTelegramError(err, EDIT_TARGET_GONE)) return false;
+      this.log.error({ err }, 'failed to edit a ticket message');
+      return true;
+    }
   }
 
   /** Returns false if the message no longer exists. */
@@ -156,6 +206,10 @@ export class TicketView {
       return true; // unknown failure: still reply to the message rather than dropping the notice
     }
   }
+}
+
+function placeOrPending(t: Messages, ticket: TicketRow): string | undefined {
+  return placeText(ticket) ?? (placePending(ticket) ? t.tickets.placePending : undefined);
 }
 
 function placeText(ticket: TicketRow): string | undefined {

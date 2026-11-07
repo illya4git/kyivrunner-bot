@@ -1,10 +1,11 @@
 import { loadConfig } from '../src/core/config.js';
-import { systemClock } from '../src/core/clock.js';
+import { processClock } from '../src/core/clock.js';
 import { silentLogger } from '../src/core/logger.js';
 import { openDb } from '../src/db/client.js';
 import { credentials, events, settings, tickets } from '../src/db/schema.js';
 import { buildServices } from '../src/services/index.js';
 import { MockKyivServer } from './server.js';
+import { MockState } from './state.js';
 
 /**
  * `npm run dev:mock` — the mock Kyiv Digital API and the bot in one process.
@@ -18,7 +19,8 @@ import { MockKyivServer } from './server.js';
  * (./data/mock.sqlite, or MOCK_DB_PATH).
  */
 const port = Number(process.env.MOCK_PORT ?? 8787);
-const mock = new MockKyivServer();
+// The mock follows the bot's clock, so `/dev clock` moves both (panel clock buttons move only the mock).
+const mock = new MockKyivServer(new MockState(() => processClock.now()));
 const url = await mock.listen(port, process.env.MOCK_HOST ?? '127.0.0.1');
 const dev = mock.state.devToken;
 
@@ -47,7 +49,7 @@ function resetBotState(): void {
   });
   const s = buildServices({
     db,
-    clock: systemClock,
+    clock: processClock,
     log: silentLogger,
     adminIds: config.adminIds,
     encryptionKey: config.encryptionKey,

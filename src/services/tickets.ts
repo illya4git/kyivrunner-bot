@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, gt, inArray, isNull, lt, lte } from 'drizzle-orm';
 import { kyivDay, type Clock } from '../core/clock.js';
 import type { Logger } from '../core/logger.js';
 import { Mutex } from '../core/mutex.js';
@@ -10,6 +10,7 @@ import { canGenerate, tripsLeft, type Code } from '../kyiv/schemas.js';
 import type { AccessService } from './access.js';
 import type { AuditService } from './audit.js';
 import type { CredentialService } from './credentials.js';
+import { MAX_PLACE_ATTEMPTS, type PlaceResolver } from './places.js';
 import type { SettingsService } from './settings.js';
 
 export type Quota = { used: number; limit: number };
@@ -25,8 +26,21 @@ export type IssueResult =
 
 export type TicketTransition = { ticket: TicketRow; to: 'used' | 'expired' };
 
-/** Renders a transition (edit the ticket message + reply). Implemented by the bot layer. */
-export type TransitionSink = (t: TicketTransition) => Promise<void>;
+/** Renders ticket changes in Telegram. Implemented by the bot layer (TicketView). */
+export interface TicketPresenter {
+  /** active → used | expired: edit the ticket message and reply to it. */
+  transition(t: TicketTransition): Promise<void>;
+  /** The place was found (or the lookup gave up): update the caption and the status reply. */
+  placeUpdated(ticket: TicketRow): Promise<void>;
+  /** A used ticket passed midnight: swap the QR for a placeholder, silently. */
+  retireImage(ticket: TicketRow): Promise<void>;
+}
+
+const NOOP_PRESENTER: TicketPresenter = {
+  transition: async () => undefined,
+  placeUpdated: async () => undefined,
+  retireImage: async () => undefined,
+};
 
 /**
  * Issues QR tickets and tracks their lifecycle (active → used | expired).
@@ -40,7 +54,7 @@ export type TransitionSink = (t: TicketTransition) => Promise<void>;
  */
 export class TicketService {
   private readonly mutex = new Mutex();
-  private sink: TransitionSink = async () => undefined;
+  private presenter: TicketPresenter = NOOP_PRESENTER;
 
   constructor(
     private readonly db: Db,
@@ -50,11 +64,12 @@ export class TicketService {
     private readonly access: AccessService,
     private readonly credentials: CredentialService,
     private readonly kyiv: KyivClient,
+    private readonly places: PlaceResolver,
     private readonly log: Logger,
   ) {}
 
-  setSink(sink: TransitionSink): void {
-    this.sink = sink;
+  setPresenter(p: TicketPresenter): void {
+    this.presenter = p;
   }
 
   // --- queries -------------------------------------------------------------------
@@ -104,6 +119,37 @@ export class TicketService {
     return this.db.select({ id: tickets.id }).from(tickets).where(eq(tickets.status, 'active')).limit(1).get() !== undefined;
   }
 
+  /** Used tickets whose place is still being looked up. */
+  pendingPlaces(): TicketRow[] {
+    return this.db
+      .select()
+      .from(tickets)
+      .where(and(eq(tickets.status, 'used'), isNull(tickets.kdFeedEventId), lt(tickets.placeAttempts, MAX_PLACE_ATTEMPTS)))
+      .all();
+  }
+
+  /** Used tickets past their validity whose QR image is still shown. */
+  dueForRetirement(): TicketRow[] {
+    return this.db
+      .select()
+      .from(tickets)
+      .where(and(eq(tickets.status, 'used'), eq(tickets.imageRetired, false), lte(tickets.expireAt, this.clock.now())))
+      .all();
+  }
+
+  /** Kyiv Digital code ids that belong to the bot's tickets, out of `ids`. */
+  knownKdIds(ids: number[]): Set<number> {
+    if (ids.length === 0) return new Set();
+    return new Set(
+      this.db
+        .select({ kd: tickets.kdTicketId })
+        .from(tickets)
+        .where(inArray(tickets.kdTicketId, ids))
+        .all()
+        .map((r) => r.kd),
+    );
+  }
+
   // --- message bookkeeping (used by the view) --------------------------------------------
 
   setMessage(id: number, chatId: number, messageId: number, resent = false): void {
@@ -121,6 +167,10 @@ export class TicketService {
 
   setStatusReply(id: number, messageId: number | null): void {
     this.db.update(tickets).set({ statusReplyId: messageId }).where(eq(tickets.id, id)).run();
+  }
+
+  markImageRetired(id: number): void {
+    this.db.update(tickets).set({ imageRetired: true }).where(eq(tickets.id, id)).run();
   }
 
   // --- issuing ----------------------------------------------------------------------------
@@ -229,6 +279,19 @@ export class TicketService {
   }
 
   /**
+   * Like sync(), but serialized with issuing, so a list taken mid-issue can't see our new
+   * code before it's recorded. Returns the code list (null if nothing was active).
+   */
+  syncExclusive(): Promise<Code[] | null> {
+    return this.mutex.run(async () => {
+      if (!this.hasActive()) return null;
+      const codes = await this.kyiv.listCodes();
+      await this.applyCodes(codes);
+      return codes;
+    });
+  }
+
+  /**
    * Apply a code list to every active ticket. Each transition is claimed with a conditional
    * UPDATE, so concurrent callers (tracker, /status, 🔄) never report it twice.
    */
@@ -261,12 +324,51 @@ export class TicketService {
     }
 
     for (const tr of out) {
+      // Try the place right away, so the first notification can already say where.
+      if (tr.to === 'used') tr.ticket = (await this.tryResolvePlace(tr.ticket)).ticket;
       try {
-        await this.sink(tr);
+        await this.presenter.transition(tr);
       } catch (err) {
         this.log.error({ err, ticket: tr.ticket.id }, 'failed to render a ticket transition');
       }
     }
     return out;
+  }
+
+  /** One more lookup for every used ticket whose place is still unknown. */
+  async resolvePendingPlaces(): Promise<void> {
+    for (const t of this.pendingPlaces()) {
+      const r = await this.tryResolvePlace(t);
+      if (r.outcome === 'retry') continue;
+      try {
+        await this.presenter.placeUpdated(r.ticket);
+      } catch (err) {
+        this.log.error({ err, ticket: t.id }, 'failed to render a resolved place');
+      }
+    }
+  }
+
+  /** Swap the QR image of used tickets that passed midnight (no API calls). */
+  async retireDueImages(): Promise<number> {
+    const due = this.dueForRetirement();
+    for (const t of due) {
+      try {
+        await this.presenter.retireImage(t);
+      } catch (err) {
+        this.log.error({ err, ticket: t.id }, 'failed to retire a ticket image');
+      }
+      this.markImageRetired(t.id); // once: a failed edit isn't worth repeated attempts
+    }
+    return due.length;
+  }
+
+  private async tryResolvePlace(t: TicketRow): Promise<{ outcome: 'found' | 'retry' | 'gave_up'; ticket: TicketRow }> {
+    try {
+      return await this.places.resolve(t);
+    } catch (err) {
+      if (!isKyivError(err)) throw err;
+      this.log.warn({ kind: err.kind, ticket: t.id }, 'feed unavailable; place stays pending');
+      return { outcome: 'retry', ticket: t };
+    }
   }
 }

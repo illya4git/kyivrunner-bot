@@ -17,6 +17,12 @@ export class OffsetClock implements Clock {
   }
 }
 
+/**
+ * The process-wide clock. Normally real time; DEV_MODE's `/dev clock` shifts it. Under
+ * `npm run dev:mock` the in-process mock reads it too, so both move together.
+ */
+export const processClock = new OffsetClock();
+
 const dayFmt = new Intl.DateTimeFormat('en-CA', {
   timeZone: KYIV_TZ,
   year: 'numeric',

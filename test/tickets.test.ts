@@ -1,41 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { isKyivError } from '../src/kyiv/errors.js';
-import { tripsLeft } from '../src/kyiv/schemas.js';
-import type { UserRow } from '../src/db/schema.js';
-import { MockKyivServer } from '../mock/server.js';
-import { MockState } from '../mock/state.js';
 import { STUDENT_CARD_ID } from '../mock/fixtures.js';
-import { ADMIN_ID, FakeClock, makeServices } from './helpers/services.js';
-import { makeTestBot } from './helpers/telegram.js';
+import { ADMIN_ID } from './helpers/services.js';
+import { closeTicketEnvs, ticketEnv } from './helpers/ticket-env.js';
 
 const HOUR = 3_600_000;
-let mock: MockKyivServer | undefined;
-afterEach(async () => {
-  await mock?.close();
-  mock = undefined;
-});
-
-/** Bot + services + mock sharing one fake clock (2026-11-07 10:00 Kyiv). */
-async function setup() {
-  const clock = new FakeClock(Date.UTC(2026, 10, 7, 8));
-  mock = new MockKyivServer(new MockState(() => clock.now()));
-  const url = await mock.listen();
-  const s = makeServices({ kyivUrl: url, clock });
-  const dev = mock.state.devToken;
-  s.credentials.save({ accessToken: dev.token, deviceUuid: dev.deviceUuid }, ADMIN_ID);
-  s.settings.set('active_card_id', STUDENT_CARD_ID, ADMIN_ID);
-  const b = makeTestBot(s);
-  const state = mock.state;
-
-  function user(id: number, language_code = 'en') {
-    s.access.touch({ id, first_name: `U${id}`, language_code });
-    s.access.setRole(id, 'user', ADMIN_ID);
-    return { id, first_name: `U${id}`, language_code };
-  }
-  const row = (id: number) => s.access.get(id) as UserRow;
-  const trips = () => tripsLeft(state.cardView(STUDENT_CARD_ID)!);
-  return { ...s, ...b, mock, state, clock, user, row, trips };
-}
+afterEach(closeTicketEnvs);
+const setup = () => ticketEnv();
 
 describe('TicketService', () => {
   it('issues one ticket and reserves one trip; a repeat request returns the same ticket', async () => {

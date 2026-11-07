@@ -50,6 +50,13 @@ and a live log of API requests. Everything in it is also available as JSON:
 | `POST /_mock/faults` `{kind, count?, rate?, path?, method?}`, `DELETE /_mock/faults` | Inject `401 423 429 500 503 shape timeout drop lost` (`lost` = processed, response dropped) |
 | `POST /_mock/latency` `{ms}`, `POST /_mock/reset` | Slow down / start over |
 
+### Dev clock (DEV_MODE only)
+
+Admins can shift the bot's clock: `/dev clock +2h`, `-30m`, `+1d`, `midnight`, `reset`, and run
+a tracker pass with `/dev tick`. Under `npm run dev:mock` the mock follows the same clock, so
+`/dev clock midnight` exercises expiry and image retirement end to end. The panel's own clock
+buttons move only the mock.
+
 ### Telegram test environment
 
 `TELEGRAM_TEST_ENV=true` connects to Telegram's separate test servers. They need their own
@@ -70,8 +77,11 @@ Migrations are applied automatically on startup.
 
 - Phase 4: `/qr` (and the 🎫 button), `/status`, `/history`. Quotas, global cap, trip reserve,
   serialized generation, and recovery of a generate whose response was lost. One message per
-  ticket: repeat requests reply to it; status changes edit it and reply. Statuses refresh on
-  demand for now (🔄, `/status`, `/qr`); background tracking comes in phase 5.
+  ticket: repeat requests reply to it; status changes edit it and reply.
+- Phase 5: background tracker (every `poll_interval_sec` while anything is active, no API calls
+  when idle, reconciliation on startup, backoff on outages), place of use from the card feed
+  (with "finding the place…" while the feed lags), silent retirement of used QR images after
+  midnight, and `foreign_code` logging for codes made in the phone app.
 
 `npm audit` reports a moderate advisory in the esbuild copy bundled with `drizzle-kit`. It's a
 dev-only tool that never runs esbuild's dev server, and it isn't shipped in the production image.
