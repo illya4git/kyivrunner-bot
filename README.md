@@ -27,7 +27,7 @@ npm run mock              # http://127.0.0.1:8787, prints stable dev credentials
 Or run the mock and the bot together in one process (uses `.env` for everything else):
 
 ```bash
-npm run dev:mock          # prints the dev token and device UUID to enter via /credentials set
+npm run dev:mock          # own DB (data/mock.sqlite); prints the dev token and UUID for /credentials set
 ```
 
 To run the bot against a separately started mock, set `KYIV_BASE_URL=http://127.0.0.1:8787` and `DEV_MODE=true`.
