@@ -3,7 +3,11 @@ import type { AddressInfo } from 'node:net';
 import { KD_CLIENT_AUTH } from '../src/kyiv/envelope.js';
 import { MockError, MockState } from './state.js';
 
-export const FAULT_KINDS = ['401', '423', '429', '500', '503', 'shape', 'timeout', 'drop'] as const;
+/**
+ * timeout: hang without processing; drop: close the connection without processing;
+ * lost: PROCESS the request, then close the connection (the response never arrives).
+ */
+export const FAULT_KINDS = ['401', '423', '429', '500', '503', 'shape', 'timeout', 'drop', 'lost'] as const;
 export type FaultKind = (typeof FAULT_KINDS)[number];
 
 export type Fault = {
@@ -309,6 +313,11 @@ export class MockKyivServer {
             return;
           case 'drop':
             log('dropped', `fault #${fault.id}`);
+            res.destroy();
+            return;
+          case 'lost':
+            route.handler(ctx);
+            log('dropped', `fault #${fault.id} (processed)`);
             res.destroy();
             return;
           case 'shape':

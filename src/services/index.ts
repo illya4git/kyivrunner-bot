@@ -7,6 +7,7 @@ import { AccessService } from './access.js';
 import { AuditService } from './audit.js';
 import { CredentialService } from './credentials.js';
 import { SettingsService } from './settings.js';
+import { TicketService } from './tickets.js';
 
 export type ServiceConfig = {
   db: Db;
@@ -38,6 +39,8 @@ export function buildServices(c: ServiceConfig): Services {
   });
   credentials = new CredentialService(c.db, c.clock, audit, c.encryptionKey, c.log, async (creds) => (await kyiv.listCards(creds)).cards);
 
+  const tickets = new TicketService(c.db, c.clock, audit, settings, access, credentials, kyiv, c.log.child({ mod: 'tickets' }));
+
   access.ensureBootstrapAdmins();
-  return { clock: c.clock, log: c.log, settings, audit, access, credentials, kyiv };
+  return { clock: c.clock, log: c.log, settings, audit, access, credentials, kyiv, tickets };
 }

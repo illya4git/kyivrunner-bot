@@ -220,6 +220,47 @@ export const uk = {
       (p.rate ? `\nЛіміт API: ${esc(p.rate)}` : ''),
   },
 
+  tickets: {
+    caption: (p: { label: string; until: string; date: string; used: number; limit: number; resent: boolean }) =>
+      (p.resent ? '🔁 <i>Попереднє повідомлення було видалено — це той самий квиток.</i>\n\n' : '') +
+      `🎫 <b>${esc(p.label)}</b>\n` +
+      `Дійсний до ${esc(p.until)} (${esc(p.date)})\n` +
+      `Сьогодні: ${p.used}/${p.limit}\n\n` +
+      `Відскануйте QR-код на валідаторі.`,
+    captionUsed: (p: { label: string; time: string; place?: string | undefined; until: string; resent: boolean }) =>
+      (p.resent ? '🔁 <i>Надіслано повторно для перевірки.</i>\n\n' : '') +
+      `✅ <b>${esc(p.label)}</b> — використано о ${esc(p.time)}` +
+      (p.place ? `\n📍 ${esc(p.place)}` : '') +
+      `\n\nПокажіть цей QR контролеру, якщо попросять (до ${esc(p.until)}).`,
+    captionExpired: (p: { label: string; date: string }) =>
+      `⌛ <b>${esc(p.label)}</b> — не використано (${esc(p.date)}).\nПоїздка повернулася на картку.`,
+    pointer: (until: string, quota: string) => `⬆️ Ваш активний QR-квиток — вище. Дійсний до ${esc(until)}.\n${quota}`,
+    pointerUsed: (time: string, quota: string) => `⬆️ Ваш квиток використано о ${esc(time)}. Його можна показати контролеру.\n${quota}`,
+    quotaLine: (used: number, limit: number) => `Сьогодні: ${used}/${limit}.`,
+    usedReply: (time: string, place?: string) => `✅ Ваш QR-квиток використано о ${esc(time)}${place ? ` — ${esc(place)}` : ''}.`,
+    expiredReply: '⌛ Ваш QR-квиток сплив невикористаним. Поїздка повернулася на картку.',
+    btnRefresh: '🔄 Оновити статус',
+    toastActive: 'Ще не використано.',
+    toastUsed: (time: string) => `Використано о ${time}.`,
+    toastExpired: 'Сплив невикористаним.',
+    notYours: 'Це не ваш квиток.',
+    noActive: (quota: string) => `Немає активного квитка. ${quota}\nНатисніть «🎫 QR», щоб отримати.`,
+    denied: {
+      paused: '⏸ Видачу квитків тимчасово призупинено адміністратором.',
+      no_credentials: '🔧 Бот тимчасово не може видавати квитки. Адміністраторів уже повідомлено.',
+      no_card: '🔧 Адміністратор ще не обрав картку для квитків.',
+      quota: (used: number, limit: number) => `🚫 Ліміт на сьогодні вичерпано (${used}/${limit}). Новий день — нові квитки.`,
+      global_cap: '🚫 Денний ліміт квитків для всіх користувачів вичерпано. Спробуйте завтра.',
+      reserve: '🚫 На картці закінчуються поїздки — видачу зупинено.',
+      card_blocked: '🚫 Картка зараз не дозволяє створювати QR-квитки.',
+    },
+    historyHeader: '<b>Ваші останні квитки</b>',
+    historyEmpty: 'Ви ще не отримували квитків.',
+    historyActive: (date: string, until: string) => `🎫 ${esc(date)} — активний до ${esc(until)}`,
+    historyUsed: (date: string, time: string, place?: string) => `✅ ${esc(date)} ${esc(time)}${place ? ` — ${esc(place)}` : ''}`,
+    historyExpired: (date: string) => `⌛ ${esc(date)} — не використано`,
+  },
+
   alerts: {
     credentialsInvalid: (reason: string) =>
       `🚨 <b>Київ Цифровий відхилив токен.</b> Видачу квитків зупинено.\nПричина: ${esc(reason)}\nВведіть нові облікові дані: /credentials`,

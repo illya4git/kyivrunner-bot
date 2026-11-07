@@ -43,7 +43,7 @@ control plane at `/_mock/`:
 | `POST /_mock/owner-generate`, `POST /_mock/foreign-validation` | Activity from the owner's phone or physical card |
 | `PATCH /_mock/cards/{id}` `{trips?, blocked?, generate_qr?, locked?}`, `POST /_mock/cards` | Card state / add a card |
 | `POST /_mock/tokens` `{exp_in_days?, device_uuid?}`, `POST /_mock/tokens/revoke` `{token \| all}` | Issue / revoke tokens |
-| `POST /_mock/faults` `{kind, count?, rate?, path?, method?}`, `DELETE /_mock/faults` | Inject `401 423 429 500 503 shape timeout drop` |
+| `POST /_mock/faults` `{kind, count?, rate?, path?, method?}`, `DELETE /_mock/faults` | Inject `401 423 429 500 503 shape timeout drop lost` (`lost` = processed, response dropped) |
 | `POST /_mock/latency` `{ms}`, `POST /_mock/reset` | Slow down / start over |
 
 ### Telegram test environment
@@ -64,7 +64,13 @@ Migrations are applied automatically on startup.
   admin alerts) and `/card` (live balance and card selection). Messages that look like a token
   are deleted wherever they appear, and redacted from the audit log.
 
+- Phase 4: `/qr` (and the 🎫 button), `/status`, `/history`. Quotas, global cap, trip reserve,
+  serialized generation, and recovery of a generate whose response was lost. One message per
+  ticket: repeat requests reply to it; status changes edit it and reply. Statuses refresh on
+  demand for now (🔄, `/status`, `/qr`); background tracking comes in phase 5.
+
 `npm audit` reports a moderate advisory in the esbuild copy bundled with `drizzle-kit`. It's a
 dev-only tool that never runs esbuild's dev server, and it isn't shipped in the production image.
 
-Ticket commands reply with "not ready yet" until their phases land.
+Admin reporting commands (`/settings`, `/stats`, `/logs`, `/export`, `/pause`) reply with "not
+ready yet" until phase 6.

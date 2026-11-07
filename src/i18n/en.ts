@@ -187,6 +187,46 @@ export const en: Messages = {
       (p.rate ? `\nAPI limit: ${esc(p.rate)}` : ''),
   },
 
+  tickets: {
+    caption: (p) =>
+      (p.resent ? '🔁 <i>The previous message was deleted — this is the same ticket.</i>\n\n' : '') +
+      `🎫 <b>${esc(p.label)}</b>\n` +
+      `Valid until ${esc(p.until)} (${esc(p.date)})\n` +
+      `Today: ${p.used}/${p.limit}\n\n` +
+      `Scan the QR code at the validator.`,
+    captionUsed: (p) =>
+      (p.resent ? '🔁 <i>Re-sent for inspection.</i>\n\n' : '') +
+      `✅ <b>${esc(p.label)}</b> — used at ${esc(p.time)}` +
+      (p.place ? `\n📍 ${esc(p.place)}` : '') +
+      `\n\nShow this QR to a conductor if asked (until ${esc(p.until)}).`,
+    captionExpired: (p) => `⌛ <b>${esc(p.label)}</b> — not used (${esc(p.date)}).\nThe trip went back to the card.`,
+    pointer: (until, quota) => `⬆️ Your active QR ticket is above. Valid until ${esc(until)}.\n${quota}`,
+    pointerUsed: (time, quota) => `⬆️ Your ticket was used at ${esc(time)}. You can show it to a conductor.\n${quota}`,
+    quotaLine: (used, limit) => `Today: ${used}/${limit}.`,
+    usedReply: (time, place) => `✅ Your QR ticket was used at ${esc(time)}${place ? ` — ${esc(place)}` : ''}.`,
+    expiredReply: '⌛ Your QR ticket expired unused. The trip went back to the card.',
+    btnRefresh: '🔄 Refresh status',
+    toastActive: 'Not used yet.',
+    toastUsed: (time) => `Used at ${time}.`,
+    toastExpired: 'Expired unused.',
+    notYours: 'This is not your ticket.',
+    noActive: (quota) => `No active ticket. ${quota}\nTap “🎫 QR” to get one.`,
+    denied: {
+      paused: '⏸ Ticket issuing is paused by an administrator.',
+      no_credentials: '🔧 The bot cannot issue tickets right now. The administrators have been notified.',
+      no_card: '🔧 An administrator has not chosen the card for tickets yet.',
+      quota: (used, limit) => `🚫 Today’s limit is used up (${used}/${limit}). New day, new tickets.`,
+      global_cap: '🚫 Today’s ticket limit for all users is used up. Try again tomorrow.',
+      reserve: '🚫 The card is running out of trips — issuing is stopped.',
+      card_blocked: '🚫 The card does not allow QR tickets right now.',
+    },
+    historyHeader: '<b>Your recent tickets</b>',
+    historyEmpty: 'You have not received any tickets yet.',
+    historyActive: (date, until) => `🎫 ${esc(date)} — active until ${esc(until)}`,
+    historyUsed: (date, time, place) => `✅ ${esc(date)} ${esc(time)}${place ? ` — ${esc(place)}` : ''}`,
+    historyExpired: (date) => `⌛ ${esc(date)} — not used`,
+  },
+
   alerts: {
     credentialsInvalid: (reason) =>
       `🚨 <b>Kyiv Digital rejected the token.</b> Ticket issuing is stopped.\nReason: ${esc(reason)}\nEnter new credentials: /credentials`,

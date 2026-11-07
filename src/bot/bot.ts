@@ -9,11 +9,13 @@ import { CommandMenus } from './menus.js';
 import { Notifier } from './notifier.js';
 import { publicCommands } from './commands/public.js';
 import { adminUserCommands } from './commands/admin-users.js';
-import { ADMIN_PLACEHOLDERS, USER_PLACEHOLDERS, placeholders } from './commands/placeholders.js';
+import { ADMIN_PLACEHOLDERS, placeholders } from './commands/placeholders.js';
 import { fallback } from './commands/fallback.js';
 import { credentialFlows } from './commands/admin-credentials.js';
 import { adminCardCommands } from './commands/admin-card.js';
 import { wireAlerts } from './alerts.js';
+import { TicketView } from './ticket-view.js';
+import { userTicketCommands } from './commands/user-tickets.js';
 
 export type CreateBotOptions = {
   token: string;
@@ -59,8 +61,10 @@ export function createBot(opts: CreateBotOptions): { bot: Bot<BotContext>; deps:
     ...opts.services,
     menus: new CommandMenus(bot.api, opts.services.log),
     notifier: new Notifier(bot.api, opts.services.access, opts.services.log),
+    ticketView: new TicketView(bot.api, opts.services.tickets, opts.services.access, opts.services.audit, opts.services.log),
     devMode: opts.devMode,
   };
+  opts.services.tickets.setSink((tr) => deps.ticketView.applyTransition(tr));
 
   const creds = credentialFlows(deps);
   bot.use(coreMiddleware(deps));
@@ -69,7 +73,7 @@ export function createBot(opts: CreateBotOptions): { bot: Bot<BotContext>; deps:
   bot.use(publicCommands(deps));
 
   const members = bot.filter((ctx) => ctx.user.role === 'user' || ctx.user.role === 'admin');
-  members.use(placeholders(USER_PLACEHOLDERS, true));
+  members.use(userTicketCommands(deps, deps.ticketView));
 
   const admins = bot.filter((ctx) => ctx.user.role === 'admin');
   admins.use(adminUserCommands(deps));

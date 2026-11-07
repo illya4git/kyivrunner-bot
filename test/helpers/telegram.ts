@@ -30,25 +30,45 @@ export function makeTestBot(services: Services) {
   let nextUpdateId = 1;
   /** Methods to fail on purpose: method → Telegram error description. */
   const failures = new Map<string, string>();
+  /** Targeted failures: return a Telegram error description to fail that call. */
+  const failIf: ((method: string, payload: Record<string, unknown>) => string | null)[] = [];
+  /** Message ids the "user" deleted: replies to / edits of them fail like in Telegram. */
+  const deleted = new Set<number>();
 
   const fake: Transformer = async (_prev, method, payload) => {
     const p = payload as Record<string, unknown>;
     calls.push({ method, payload: p });
-    const failure = failures.get(method);
+    const failure = failures.get(method) ?? failIf.map((f) => f(method, p)).find((x) => x) ?? simulateDeleted(method, p);
     if (failure) return { ok: false, error_code: 400, description: failure } as never;
     // Validate HTML exactly where Telegram would, so markup bugs fail tests instead of production.
-    if (p.parse_mode === 'HTML') {
-      for (const field of ['text', 'caption'] as const) {
-        const value = p[field];
-        const err = typeof value === 'string' ? telegramHtmlError(value) : null;
-        if (err) throw new Error(`Telegram would reject ${method}.${field}: ${err}\n---\n${value}`);
-      }
+    const checks: [string, unknown, unknown][] = [
+      ['text', p.text, p.parse_mode],
+      ['caption', p.caption, p.parse_mode],
+      ['media.caption', (p.media as Record<string, unknown> | undefined)?.caption, (p.media as Record<string, unknown> | undefined)?.parse_mode],
+    ];
+    for (const [field, value, mode] of checks) {
+      const err = mode === 'HTML' && typeof value === 'string' ? telegramHtmlError(value) : null;
+      if (err) throw new Error(`Telegram would reject ${method}.${field}: ${err}\n---\n${value}`);
     }
     const chat = { id: Number(p.chat_id ?? 0), type: 'private' as const };
-    const message = { message_id: nextMessageId++, date: 0, chat, text: p.text };
-    const result = method.startsWith('send') || method === 'editMessageText' ? message : true;
+    const message =
+      method === 'sendPhoto'
+        ? { message_id: nextMessageId++, date: 0, chat, photo: [{ file_id: 'f', file_unique_id: 'u', width: 640, height: 640 }], caption: p.caption }
+        : { message_id: nextMessageId++, date: 0, chat, text: p.text };
+    const result = method.startsWith('send') || method.startsWith('edit') ? message : true;
     return { ok: true, result } as never;
   };
+
+  function simulateDeleted(method: string, p: Record<string, unknown>): string | null {
+    const reply = (p.reply_parameters as { message_id?: number; allow_sending_without_reply?: boolean } | undefined) ?? undefined;
+    if (reply?.message_id !== undefined && deleted.has(reply.message_id) && !reply.allow_sending_without_reply) {
+      return 'Bad Request: message to be replied not found';
+    }
+    if (method.startsWith('edit') && typeof p.message_id === 'number' && deleted.has(p.message_id)) {
+      return 'Bad Request: message to edit not found';
+    }
+    return null;
+  }
 
   const { bot, deps } = createBot({ token: 'test:token-0000000000000000', services, devMode: true, botInfo: BOT_INFO, offline: true, transformers: [fake] });
   // Production swallows handler errors (logs + "something went wrong"); tests must see them.
@@ -96,5 +116,10 @@ export function makeTestBot(services: Services) {
       .map((c) => String(c.payload.text));
   }
 
-  return { bot, deps, calls, failures, text, press, take, textsTo };
+  /** Photos sent to `chatId` in a batch. */
+  function photosTo(chatId: number, batch: ApiCall[]): ApiCall[] {
+    return batch.filter((c) => c.method === 'sendPhoto' && Number(c.payload.chat_id) === chatId);
+  }
+
+  return { bot, deps, calls, failures, failIf, deleted, text, press, take, textsTo, photosTo };
 }

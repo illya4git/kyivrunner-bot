@@ -77,6 +77,8 @@ export const tickets = sqliteTable(
     /** Raw QR payload. Needed for a one-time re-send; valid for one day at most. */
     code: text('code').notNull(),
     kyivDay: text('kyiv_day').notNull(),
+    /** Card class label shown with the QR (from code.qr_texts.label.text). */
+    label: text('label'),
     status: text('status', { enum: TICKET_STATUSES }).notNull().default('active'),
     issuedAt: integer('issued_at').notNull(),
     expireAt: integer('expire_at').notNull(),
