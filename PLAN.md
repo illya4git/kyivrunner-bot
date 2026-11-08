@@ -80,7 +80,7 @@ Operations: [README.md](README.md)
 | D32 | **Admins have no per-user daily quota** (they can change quotas anyway). The global daily cap and the trip reserve still apply to them. A quota stored for an admin takes effect if they're demoted. |
 | D33 | **Polling jitter:** every tracker interval (`/qr`, feed, idle pass) varies by ±20%, re-rolled after each request, so the calls don't form an exact rhythm. The place-search delay and give-up time are not jittered. |
 | D34 | **Nightly maintenance** (00:00–01:00 until 03:00 Kyiv; only generate is refused, with a 422 naming the end time). The client recognises the message, records the end time, and from then on **sends no requests at all** until it passes (`KyivError` `maintenance`, raised locally). `/qr` replies with a translated "🌙 … after 03:00", isn't charged to the quota, and is logged as `cap_denied` `reason: maintenance`; the start is logged once as a `maintenance` event. The tracker keeps its idle passes (liveness, images) without API calls and resumes within a minute of the end. Admins are alerted only if it starts outside 23:30–04:00 (once a day). The window isn't blocked in advance, because generation may still work between 00:00 and its actual start. No "notify me" button (decided against). |
-| D35 | **Placeholder images are static files** (`assets/ticket-used.png`, `assets/ticket-expired.png`, drawn once by `npm run assets:placeholders` or replaced with any artwork) and **uploaded to Telegram only once**: the returned `file_id` is stored in `telegram_files` under a key that includes a hash of the image, and reused for every later swap. A changed image gets a new key (one new upload); an id Telegram rejects (e.g. after switching bot tokens) is forgotten and the image uploaded again. QR images are unique per ticket and still uploaded. |
+| D35 | **Placeholder images are static files** (`assets/ticket-used.png`, `assets/ticket-expired.png`, replace them with any artwork of the same names) and **uploaded to Telegram only once**: the returned `file_id` is stored in `telegram_files` under a key that includes a hash of the image, and reused for every later swap. A changed image gets a new key (one new upload); an id Telegram rejects (e.g. after switching bot tokens) is forgotten and the image uploaded again. QR images are unique per ticket and still uploaded. |
 
 ---
 
@@ -324,7 +324,6 @@ mock/        server state fixtures jwt main dev panel.html
 drizzle/     0000_init 0001_ticket_label 0002_place_search 0003_telegram_files
 test/        helpers/{services,telegram,telegram-html,kyiv,ticket-env}  *.test.ts
 assets/      ticket-used.png  ticket-expired.png
-scripts/     draw-placeholders.ts (npm run assets:placeholders)
 Dockerfile  compose.yaml  compose.dev.yaml  .env.example  README.md  PLAN.md  docs/
 ```
 

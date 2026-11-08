@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 /**
  * Pictograms that replace a QR image once it can no longer be used: assets/ticket-<kind>.png
- * (drawn by scripts/draw-placeholders.ts, or any artwork of the same names). Read once.
+ * (any artwork of those names). Read once.
  */
 export type PlaceholderKind = 'used' | 'expired';
 
