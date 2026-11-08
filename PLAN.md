@@ -32,6 +32,7 @@ Operations: [README.md](README.md)
 | `used_at` vs the feed's `created_at` | **Verified live:** equal to the second |
 | `/qr` lag (scan → `used_at` visible) | **Observed live:** 1–8 minutes |
 | Feed lag (scan → `val_` visible) | Longer than `/qr`'s; not measured yet. `place_found` events now record it (`foundAfterSec`) |
+| Nightly maintenance | **Observed live** at 01:11: generate → 422 with the end time; all reads 200 (D34) |
 | Used codes drop out of `/qr` ~2 h after the scan | **Observed live:** one code listed at 1 h 26 min and gone at 2 h 02 min after its scan; another gone at 3.8 h. The bot (D31) and the mock handle it |
 | Error responses the mock guessed (422 on a blocked or empty card, 401 on a device mismatch) | Unverified. The client handles any 4xx either way. |
 | Token refresh (`/auth/refresh`) | Not used: tokens are re-entered by admins |
@@ -78,6 +79,7 @@ Operations: [README.md](README.md)
 | D31 | **A code missing from `/qr` before its expiry counts as used** (used codes drop out ~2 h after the scan). Its time and place come from the earliest unclaimed `val_` event between issue and the moment it went missing. Without this, a ticket used while the bot was down for 2+ hours was reported "expired unused" at midnight. |
 | D32 | **Admins have no per-user daily quota** (they can change quotas anyway). The global daily cap and the trip reserve still apply to them. A quota stored for an admin takes effect if they're demoted. |
 | D33 | **Polling jitter:** every tracker interval (`/qr`, feed, idle pass) varies by ±20%, re-rolled after each request, so the calls don't form an exact rhythm. The place-search delay and give-up time are not jittered. |
+| D34 | **Nightly maintenance** (00:00–01:00 until 03:00 Kyiv; only generate is refused, with a 422 naming the end time). The client recognises the message, records the end time, and from then on **sends no requests at all** until it passes (`KyivError` `maintenance`, raised locally). `/qr` replies with a translated "🌙 … after 03:00", isn't charged to the quota, and is logged as `cap_denied` `reason: maintenance`; the start is logged once as a `maintenance` event. The tracker keeps its idle passes (liveness, images) without API calls and resumes within a minute of the end. Admins are alerted only if it starts outside 23:30–04:00 (once a day). The window isn't blocked in advance, because generation may still work between 00:00 and its actual start. No "notify me" button (decided against). |
 
 ---
 
@@ -233,7 +235,7 @@ Migrations: `0000_init`, `0001_ticket_label`, `0002_place_search` (also re-opens
 Event kinds: `interaction`, `denied`, `access_requested`, `access_request_ignored`, `ticket_issued`,
 `ticket_pointed`, `ticket_resent`, `ticket_used` (with `reportedAfterSec` or `missingFromList`), `ticket_expired`, `place_found` (with `foundAfterSec`), `place_unresolved`, `quota_denied`,
 `cap_denied`, `role_changed`, `quota_changed`, `locale_changed`, `setting_changed`, `credentials_set`,
-`credentials_cleared`, `credentials_invalid`, `credentials_expiring`, `api_error`, `foreign_code`,
+`credentials_cleared`, `credentials_invalid`, `credentials_expiring`, `api_error`, `maintenance`, `foreign_code`,
 `paused`, `resumed`, `admin_alert`, `exported`.
 
 ---
@@ -279,7 +281,7 @@ Private chats only; per-role command menus in the user's language; a 🎫 QR rep
 
 The real API's paths and shapes, with strict envelope checks (X-Client-Auth placeholder, Bearer, device binding, no `Content-Type` on generate) and simulated rate-limit headers. State: cards, codes, feed, tokens, clock. Trips are reserved on generate and returned at midnight.
 
-- **Control panel** at `/_mock/` (`/` redirects there). **JSON control plane** under `/_mock/*`: validate (station, feed delay), expire, midnight, clock, owner-generate, physical-card tap, card patch/add, tokens issue/revoke, faults (`401 423 429 500 503 shape timeout drop lost`), latency, reset, state, requests, endpoints.
+- **Control panel** at `/_mock/` (`/` redirects there). **JSON control plane** under `/_mock/*`: validate (station, feed delay), expire, midnight, clock, owner-generate, physical-card tap, card patch/add, tokens issue/revoke, faults (`401 423 429 500 503 shape timeout drop lost maintenance`), nightly maintenance (generate refused 00:00–03:00 Kyiv by the mock clock, toggle), latency, reset, state, requests, endpoints.
 - **Runs:** `npm run mock` (alone), `npm run dev:mock` (with the bot, D21), the `mock` Docker target with `compose.dev.yaml`, and in-process in tests.
 
 ---

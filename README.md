@@ -124,6 +124,9 @@ it. `/credentials check` re-tests the stored token.
   session was logged out. Enter both again.
 - *📡 Kyiv Digital not responding*: usually transient. The tracker backs off (up to 5 minutes) and
   reports recovery. Check the box's internet connection if it persists.
+- *Users see "🌙 nightly maintenance"*: Kyiv Digital doesn't create QR tickets from about 00:00–01:00
+  until 03:00. The bot pauses all requests until then and resumes on its own. Admins only hear about
+  maintenance outside those hours.
 - *Users see "limit used up"*: check `/stats today`, then adjust `/quota` or `/set default_daily_quota`.
 - *Users see "running out of trips"*: the balance reached `reserve_trips`. Top up the card, or lower the reserve.
 - *A ticket never gets its place*: the trip history hadn't listed the scan 6 hours later
@@ -182,7 +185,8 @@ The same actions are available as JSON:
 | `POST /_mock/owner-generate`, `POST /_mock/foreign-validation` | Activity from the owner's phone or physical card |
 | `PATCH /_mock/cards/{id}` `{trips?, blocked?, generate_qr?, locked?}`, `POST /_mock/cards` | Card state / add a card |
 | `POST /_mock/tokens` `{exp_in_days?, device_uuid?}`, `POST /_mock/tokens/revoke` `{token \| all}` | Issue / revoke tokens |
-| `POST /_mock/faults` `{kind, count?, rate?, path?, method?}`, `DELETE /_mock/faults` | Inject `401 423 429 500 503 shape timeout drop lost` (`lost` = processed, response dropped) |
+| `POST /_mock/faults` `{kind, count?, rate?, path?, method?}`, `DELETE /_mock/faults` | Inject `401 423 429 500 503 shape timeout drop lost maintenance` (`lost` = processed, response dropped) |
+| `POST /_mock/maintenance` `{nightly}` | Refuse generate 00:00–03:00 Kyiv time (mock clock), like the real service (on by default) |
 | `POST /_mock/latency` `{ms}`, `POST /_mock/reset` | Slow down / start over |
 
 ### Dev clock

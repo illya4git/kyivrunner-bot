@@ -1,3 +1,4 @@
+import { isMaintenanceMessage, maintenanceEnd, type MaintenanceState } from './maintenance.js';
 import type { z } from 'zod';
 import type { Logger } from '../core/logger.js';
 import { envelopeHeaders, type KyivCredentials } from './envelope.js';
@@ -28,6 +29,8 @@ export type KyivClientOptions = {
   timeoutMs?: number;
   /** Retries for idempotent GETs on 5xx / network errors. */
   getRetries?: number;
+  /** Shared maintenance state: requests are refused locally while it is active. */
+  maintenance?: MaintenanceState;
   /**
    * Called after each request made with the stored credentials (not one-off ones):
    * lets the credential service track health (401 → invalid, success → last OK).
@@ -108,6 +111,11 @@ export class KyivClient {
   // --- transport ---------------------------------------------------------------
 
   private async request<S extends z.ZodType>(req: RequestOpts<S>): Promise<z.output<S>> {
+    // During maintenance nothing is sent at all, not even reads.
+    const until = this.opts.maintenance?.until;
+    if (until != null) {
+      throw new KyivError('maintenance', 'Kyiv Digital is under maintenance', { method: req.method, path: req.path, until, skipped: true });
+    }
     const report = req.credentials ? undefined : this.opts.onStoredCredentialsResult;
     try {
       const result = await this.requestWithRetries(req);
@@ -178,6 +186,11 @@ export class KyivClient {
     }
 
     const details = { ...where, status: res.status, serverMessage: serverMessage(body) };
+    if (isMaintenanceMessage(details.serverMessage)) {
+      const until = this.opts.maintenance?.enter(details.serverMessage) ?? maintenanceEnd(details.serverMessage, Date.now());
+      this.opts.log.warn({ ...where, status: res.status, until: new Date(until).toISOString() }, 'kyiv maintenance: pausing requests');
+      throw new KyivError('maintenance', 'Kyiv Digital is under maintenance', { ...details, until });
+    }
     switch (true) {
       case res.status === 401 || res.status === 423:
         throw new KyivError('unauthorized', `token rejected (${res.status})`, details);

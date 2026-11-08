@@ -20,6 +20,7 @@ afterEach(async () => {
 /** Services wired to a fresh mock. The FakeClock is aligned with the mock's real clock. */
 async function setup() {
   mock = new MockKyivServer();
+  mock.state.nightlyMaintenance = false; // real clock
   const url = await mock.listen();
   const s = makeServices({ kyivUrl: url, clock: new FakeClock(Date.now()) });
   const dev = mock.state.devToken;

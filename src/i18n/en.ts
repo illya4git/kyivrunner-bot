@@ -125,6 +125,7 @@ export const en: Messages = {
     unavailable: '📡 Kyiv Digital is unavailable right now. Try again later.',
     shape: '🧩 Kyiv Digital returned unexpected data. Admins should check the log.',
     rejected: (msg) => `⛔ Kyiv Digital refused the request${msg ? `: ${esc(msg)}` : '.'}`,
+    maintenance: (until) => `🌙 Kyiv Digital is under nightly maintenance until ${esc(until)}. Try again after that.`,
   },
 
   creds: {
@@ -222,6 +223,7 @@ export const en: Messages = {
       global_cap: '🚫 Today’s ticket limit for all users is used up. Try again tomorrow.',
       reserve: '🚫 The card is running out of trips — issuing is stopped.',
       card_blocked: '🚫 The card does not allow QR tickets right now.',
+      maintenance: (until) => `🌙 Kyiv Digital is under nightly maintenance: QR tickets can be created again after ${esc(until)}.`,
     },
     historyHeader: '<b>Your recent tickets</b>',
     historyEmpty: 'You have not received any tickets yet.',
@@ -300,6 +302,7 @@ export const en: Messages = {
     generationBlocked: '⛔ The card does not allow QR tickets (blocked, or generation is off). /card',
     apiDegraded: (kind) => `📡 Kyiv Digital has not been responding for several minutes (${esc(kind)}). Ticket statuses will update once it is back.`,
     apiRecovered: '✅ Kyiv Digital is reachable again.',
+    maintenanceUnusual: (at, until) => `🌙 Kyiv Digital reported maintenance at an unusual time (${esc(at)}). Requests are paused until ${esc(until)}.`,
     credentialsInvalid: (reason) =>
       `🚨 <b>Kyiv Digital rejected the token.</b> Ticket issuing is stopped.\nReason: ${esc(reason)}\nEnter new credentials: /credentials`,
     credentialsRestored: '✅ The credentials work again.',

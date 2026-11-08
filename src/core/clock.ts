@@ -47,6 +47,21 @@ export function kyivDayEnd(ms: number): number {
   throw new Error(`cannot find Kyiv midnight after ${today}`);
 }
 
+/**
+ * The instant when the Kyiv wall clock shows `hour:minute` on the Kyiv day containing `ms`.
+ * DST-safe; a time skipped by the spring change falls back to one hour later.
+ */
+export function kyivAt(ms: number, hour: number, minute = 0): number {
+  const day = kyivDay(ms);
+  const [y, m, d] = day.split('-').map(Number) as [number, number, number];
+  const want = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  for (const offsetH of [2, 3]) {
+    const t = Date.UTC(y, m - 1, d, hour, minute) - offsetH * 3_600_000;
+    if (kyivDay(t) === day && kyivTime(t) === want) return t;
+  }
+  return Date.UTC(y, m - 1, d, hour, minute) - 2 * 3_600_000; // skipped hour: winter offset
+}
+
 const timeFmt = new Intl.DateTimeFormat('en-GB', { timeZone: KYIV_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const dateTimeFmt = new Intl.DateTimeFormat('en-GB', {
   timeZone: KYIV_TZ,

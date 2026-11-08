@@ -17,14 +17,15 @@ import type { SettingsService } from './settings.js';
 /** `limit` null = no per-user limit (admins). */
 export type Quota = { used: number; limit: number | null };
 
-export type DenyReason = 'paused' | 'no_credentials' | 'no_card' | 'quota' | 'global_cap' | 'reserve' | 'card_blocked';
+export type DenyReason = 'paused' | 'no_credentials' | 'no_card' | 'quota' | 'global_cap' | 'reserve' | 'card_blocked' | 'maintenance';
 
 export type IssueResult =
   | { kind: 'issued'; ticket: TicketRow; quota: Quota }
   /** The user already has an active ticket — point them to it, never generate another. */
   | { kind: 'existing'; ticket: TicketRow; quota: Quota }
   /** `inspectable`: today's used ticket that is still valid for a conductor's re-scan. */
-  | { kind: 'denied'; reason: DenyReason; quota: Quota; inspectable?: TicketRow };
+  /** `until`: end of Kyiv Digital's maintenance (reason 'maintenance'). */
+  | { kind: 'denied'; reason: DenyReason; quota: Quota; inspectable?: TicketRow; until?: number };
 
 export type TicketTransition = { ticket: TicketRow; to: 'used' | 'expired' };
 
@@ -207,6 +208,18 @@ export class TicketService extends EventEmitter<TicketEvents> {
   }
 
   private async issueLocked(user: UserRow): Promise<IssueResult> {
+    try {
+      return await this.issueChecked(user);
+    } catch (err) {
+      // Nightly maintenance (announced now, or already known: then nothing was sent).
+      if (!isKyivError(err, 'maintenance')) throw err;
+      const until = err.details.until!;
+      this.audit.log({ kind: 'cap_denied', tgId: user.tgId, role: user.role, data: { reason: 'maintenance', until } });
+      return { kind: 'denied', reason: 'maintenance', quota: this.quota(user), until };
+    }
+  }
+
+  private async issueChecked(user: UserRow): Promise<IssueResult> {
     const deny = (reason: DenyReason, extra: { inspectable?: TicketRow } = {}): IssueResult => ({ kind: 'denied', reason, quota: this.quota(user), ...extra });
 
     if (this.settings.get('paused')) return deny('paused');

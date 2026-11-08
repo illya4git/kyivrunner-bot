@@ -10,7 +10,9 @@ export type KyivErrorKind =
   /** 200 with a body that doesn't match the documented shape. */
   | 'shape'
   /** Any other non-2xx (e.g. 4xx refusing an action). */
-  | 'rejected';
+  | 'rejected'
+  /** Nightly maintenance: announced by the server, or a request skipped while it lasts. */
+  | 'maintenance';
 
 export class KyivError extends Error {
   override readonly name = 'KyivError';
@@ -26,6 +28,10 @@ export class KyivError extends Error {
       retryAfterMs?: number;
       /** POST whose outcome is unknown (timeout/5xx): the server may have acted on it. */
       ambiguous?: boolean;
+      /** For maintenance: when it ends (service clock, ms). */
+      until?: number;
+      /** For maintenance: true when no request was sent because maintenance was already known. */
+      skipped?: boolean;
       /** Server message, if any (never contains our token). */
       serverMessage?: string;
       cause?: unknown;

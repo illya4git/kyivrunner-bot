@@ -62,7 +62,7 @@ describe('TicketService', () => {
     expect(t3).toMatchObject({ kind: 'denied', reason: 'quota', quota: { used: 2, limit: 2 } });
     expect(t3.kind === 'denied' && t3.inspectable?.id).toBe(t2.kind === 'issued' ? t2.ticket.id : -1);
 
-    s.clock.advance(14 * HOUR); // 02:00 next day in Kyiv
+    s.clock.advance(16 * HOUR); // 04:00 next day in Kyiv (after the nightly maintenance)
     expect((await s.tickets.issue(s.row(5))).kind).toBe('issued');
   });
 

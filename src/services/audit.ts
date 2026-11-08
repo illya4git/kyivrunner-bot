@@ -26,6 +26,7 @@ export const EVENT_KINDS = [
   'credentials_invalid',
   'credentials_expiring',
   'api_error',
+  'maintenance',
   'foreign_code',
   'paused',
   'resumed',

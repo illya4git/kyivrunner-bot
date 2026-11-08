@@ -103,6 +103,25 @@ Response (new code is `codes[0]`):
   … ] }
 ```
 
+### Nightly maintenance (observed 2026-11-09 01:11 Kyiv time)
+Every night Kyiv Digital runs maintenance from about **00:00–01:00 until 03:00** Kyiv time. During it
+**generate is refused**; nothing is reserved (the balance and the code list stay unchanged):
+```http
+HTTP/2 422
+Content-Type: application/json
+
+{"message":"Тимчасові технічні роботи. Спробуйте створити QR-квиток наново після 3:00.",
+ "errors":{"balance":["Тимчасові технічні роботи. Спробуйте створити QR-квиток наново після 3:00."]}}
+```
+("Temporary technical work. Try creating the QR ticket again after 3:00.")
+- **Nothing else signals it.** `GET /api/v4/card/travel` still shows `actions.generate_qr: true`,
+  `qr_generate_blocked: false` and no `locked_at`, so the precondition above can't predict it.
+- **Reads keep working:** `GET /api/v4/card/travel`, `GET /api/v4/qr` (empty after midnight, since
+  every code has expired), `GET …/feed` (the midnight `eqr_` event is already there) and
+  `GET /api/v3/user/profile` all answered 200 as usual.
+- Recognise it by the message (`технічні роботи`) rather than the status: 422 is also what a
+  blocked or empty card is expected to return. The end time is in the text (`після 3:00`).
+
 ### Ticket mechanics
 (Confirmed with the account owner.)
 - Each **generation reserves one ticket** from `monthly_tickets_balance` (observed `37 → 36` on one generate).

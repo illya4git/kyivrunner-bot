@@ -129,6 +129,7 @@
         <option value="timeout">timeout (hang)</option>
         <option value="drop">drop (not processed)</option>
         <option value="lost">lost (processed, no response)</option>
+        <option value="maintenance">422 maintenance</option>
       </select>
       <label>count <input type="number" id="fCount" value="1" min="1"></label>
       <label title="Probability per request; leave empty for 'always'">rate <input type="number" id="fRate" step="0.1" min="0" max="1" placeholder="1"></label>
@@ -140,6 +141,11 @@
     <div class="row">
       <label>Latency <input type="number" id="latency" min="0" step="100"> ms</label>
       <button id="setLatency">Set</button>
+    </div>
+    <div class="row">
+      <label title="Generate returns 422 between 00:00 and 03:00 Kyiv time (mock clock), like the real service">
+        <input type="checkbox" id="nightly"> Nightly maintenance 00:00–03:00</label>
+      <span id="maintNow" class="muted"></span>
     </div>
   </section>
 
@@ -286,6 +292,8 @@ function render(force) {
       <span class="muted">${f.remaining !== undefined ? `${f.remaining} left` : 'unlimited'}${f.rate !== undefined ? ` · rate ${f.rate}` : ''}${f.method ? ` · ${f.method}` : ''}${f.path ? ` · path ~ ${esc(f.path)}` : ''}</span></div>`).join('')
     : 'No active faults.', force);
   if (document.activeElement !== $('latency')) $('latency').value = s.latency_ms;
+  $('nightly').checked = s.nightly_maintenance;
+  $('maintNow').innerHTML = s.in_maintenance ? '<span class="pill warn">in maintenance now</span>' : '';
 }
 
 function renderRequests(reqs, force) {
@@ -359,6 +367,7 @@ $('addFault').onclick = () => {
   act(`Fault ${body.kind} armed`, () => api('POST', '/_mock/faults', body));
 };
 $('clearFaults').onclick = () => act('Faults cleared', () => api('DELETE', '/_mock/faults'));
+$('nightly').onchange = () => act(`Nightly maintenance ${$('nightly').checked ? 'on' : 'off'}`, () => api('POST', '/_mock/maintenance', { nightly: $('nightly').checked }));
 $('setLatency').onclick = () => act('Latency set', () => api('POST', '/_mock/latency', { ms: Number($('latency').value) || 0 }));
 
 load(true);

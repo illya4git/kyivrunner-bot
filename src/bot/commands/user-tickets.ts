@@ -24,7 +24,9 @@ export function userTicketCommands(deps: BotDeps, view: TicketView): Composer<Bo
 
   async function apiFailure(ctx: BotContext, err: unknown, op: string) {
     if (!isKyivError(err)) throw err;
-    deps.audit.log({ kind: 'api_error', tgId: ctx.user.tgId, role: ctx.user.role, data: { op, kind: err.kind, status: err.details.status ?? null } });
+    if (err.kind !== 'maintenance') {
+      deps.audit.log({ kind: 'api_error', tgId: ctx.user.tgId, role: ctx.user.role, data: { op, kind: err.kind, status: err.details.status ?? null } });
+    }
     await ctx.reply(kyivErrorText(ctx.t, err));
   }
 
@@ -93,6 +95,7 @@ export function userTicketCommands(deps: BotDeps, view: TicketView): Composer<Bo
 
 function deniedText(t: Messages, res: Extract<IssueResult, { kind: 'denied' }>): string {
   if (res.reason === 'quota') return t.tickets.denied.quota(res.quota.used, res.quota.limit ?? 0);
+  if (res.reason === 'maintenance') return t.tickets.denied.maintenance(kyivTime(res.until ?? Date.now()));
   return t.tickets.denied[res.reason];
 }
 

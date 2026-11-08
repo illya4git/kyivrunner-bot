@@ -71,10 +71,22 @@ export class MockError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Extra fields of the error body (e.g. Laravel-style `errors`). */
+    readonly extra: Record<string, unknown> = {},
   ) {
     super(message);
   }
 }
+
+/** The real refusal of generate during the nightly maintenance (observed 2026-11-09 01:11). */
+export const MAINTENANCE_MESSAGE = 'Тимчасові технічні роботи. Спробуйте створити QR-квиток наново після 3:00.';
+export function maintenanceError(): MockError {
+  return new MockError(422, MAINTENANCE_MESSAGE, { errors: { balance: [MAINTENANCE_MESSAGE] } });
+}
+
+/** Nightly maintenance, Kyiv time: generate is refused (real start varies 00:00–01:00; end 03:00). */
+export const MAINTENANCE_START_MIN = 0;
+export const MAINTENANCE_END_MIN = 3 * 60;
 
 /** The real /qr stops listing a used code about 2 hours after the scan (observed 2026-11-08). */
 export const USED_CODE_LISTED_SEC = 2 * 3600;
@@ -87,6 +99,8 @@ export const USED_CODE_LISTED_SEC = 2 * 3600;
 export class MockState {
   /** Shift of the mock's clock relative to real time, seconds. */
   clockOffsetSec = 0;
+  /** Refuse generate during the nightly maintenance window, like the real service. */
+  nightlyMaintenance = true;
   tokens = new Map<string, MockToken>();
   cards: MockCard[] = [];
   private codes: StoredCode[] = []; // newest first
@@ -105,6 +119,7 @@ export class MockState {
 
   reset(cards: CardSeed[] = DEFAULT_CARDS): void {
     this.clockOffsetSec = 0;
+    this.nightlyMaintenance = true;
     this.tokens.clear();
     this.cards = cards.map((c) => this.makeCard(c));
     this.codes = [];
@@ -193,9 +208,18 @@ export class MockState {
 
   // --- actions ------------------------------------------------------------------
 
+  /** Is the mock clock inside the nightly maintenance window (and is it enabled)? */
+  inMaintenance(): boolean {
+    if (!this.nightlyMaintenance) return false;
+    const [h, m] = kyivTime(this.nowSec() * 1000).split(':').map(Number) as [number, number];
+    const minutes = h * 60 + m;
+    return minutes >= MAINTENANCE_START_MIN && minutes < MAINTENANCE_END_MIN;
+  }
+
   generate(cardId: number): MockCode {
     const card = this.card(cardId);
     if (!card) throw new MockError(404, 'Not found');
+    if (this.inMaintenance()) throw maintenanceError();
     if (card.locked_at || card.qr_generate_blocked || !card.actions.generate_qr) throw new MockError(422, 'Генерація QR-квитків недоступна');
     if (card.monthly_tickets_balance <= 0) throw new MockError(422, 'Недостатньо поїздок');
 

@@ -1,3 +1,4 @@
+import type { MaintenanceState } from '../kyiv/maintenance.js';
 import type { Context } from 'grammy';
 import type { Clock } from '../core/clock.js';
 import type { Logger } from '../core/logger.js';
@@ -20,6 +21,7 @@ export type Services = {
   settings: SettingsService;
   credentials: CredentialService;
   kyiv: KyivClient;
+  maintenance: MaintenanceState;
   tickets: TicketService;
   tracker: TicketTracker;
   stats: StatsService;

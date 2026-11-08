@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import { MOCK_CLIENT_AUTH } from '../src/kyiv/envelope.js';
 import { STATIONS } from './fixtures.js';
-import { MockError, MockState } from './state.js';
+import { MockError, MockState, maintenanceError } from './state.js';
 
 const PANEL_PATH = new URL('./panel.html', import.meta.url);
 
@@ -11,7 +11,7 @@ const PANEL_PATH = new URL('./panel.html', import.meta.url);
  * timeout: hang without processing; drop: close the connection without processing;
  * lost: PROCESS the request, then close the connection (the response never arrives).
  */
-export const FAULT_KINDS = ['401', '423', '429', '500', '503', 'shape', 'timeout', 'drop', 'lost'] as const;
+export const FAULT_KINDS = ['401', '423', '429', '500', '503', 'shape', 'timeout', 'drop', 'lost', 'maintenance'] as const;
 export type FaultKind = (typeof FAULT_KINDS)[number];
 
 export type Fault = {
@@ -152,6 +152,8 @@ export class MockKyivServer {
       tokens: [...s.tokens.values()],
       faults: this.faults,
       latency_ms: this.latencyMs,
+      nightly_maintenance: s.nightlyMaintenance,
+      in_maintenance: s.inMaintenance(),
     }));
     this.route('GET', /^\/_mock\/requests$/, () => this.requests.slice(-100).reverse());
     this.route('POST', /^\/_mock\/reset$/, () => {
@@ -248,6 +250,12 @@ export class MockKyivServer {
     this.route('DELETE', /^\/_mock\/faults$/, () => {
       this.faults = [];
       return { ok: true };
+    });
+    this.route('POST', /^\/_mock\/maintenance$/, ({ json }) => {
+      const b = json();
+      if (typeof b.nightly !== 'boolean') throw new MockError(400, 'nightly must be a boolean');
+      s.nightlyMaintenance = b.nightly;
+      return { nightly_maintenance: s.nightlyMaintenance, in_maintenance: s.inMaintenance() };
     });
     this.route('POST', /^\/_mock\/latency$/, ({ json }) => {
       this.latencyMs = Math.max(0, num(json().ms, 'ms') ?? 0);
@@ -347,6 +355,10 @@ export class MockKyivServer {
             return send(423, { message: 'Error', recaptcha_link: 'https://kyiv.digital/recaptcha?c=mock' }, rlHeaders, `fault #${fault.id}`);
           case '429':
             return send(429, { message: 'Too Many Attempts.' }, { ...rlHeaders, 'retry-after': '1' }, `fault #${fault.id}`);
+          case 'maintenance': {
+            const e = maintenanceError();
+            return send(e.status, { message: e.message, ...e.extra }, rlHeaders, `fault #${fault.id}`);
+          }
           default:
             return send(Number(fault.kind), { message: `mock fault ${fault.kind}` }, rlHeaders, `fault #${fault.id}`);
         }
@@ -354,7 +366,7 @@ export class MockKyivServer {
 
       return send(200, route.handler(ctx), rlHeaders);
     } catch (err) {
-      if (err instanceof MockError) return send(err.status, { message: err.message });
+      if (err instanceof MockError) return send(err.status, { message: err.message, ...err.extra });
       if (err instanceof SyntaxError) return send(400, { message: 'invalid JSON' });
       return send(500, { message: String(err) });
     }

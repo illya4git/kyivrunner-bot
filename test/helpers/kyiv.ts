@@ -9,6 +9,7 @@ import { MockKyivServer } from '../../mock/server.js';
  */
 export async function startMockKyiv(clientOpts: Partial<KyivClientOptions> = {}) {
   const mock = new MockKyivServer();
+  mock.state.nightlyMaintenance = false; // runs on the real clock: don't fail at night
   const url = await mock.listen();
   const dev = mock.state.devToken;
   let creds: KyivCredentials | null = { accessToken: dev.token, deviceUuid: dev.deviceUuid };

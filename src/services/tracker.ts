@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { Clock } from '../core/clock.js';
 import type { Logger } from '../core/logger.js';
+import type { MaintenanceState } from '../kyiv/maintenance.js';
 import { isKyivError } from '../kyiv/errors.js';
 import type { AuditService } from './audit.js';
 import type { CredentialService } from './credentials.js';
@@ -38,6 +39,9 @@ export type TrackerEvents = {
  *  - the feed is searched from `place_search_delay_min` (5) after the scan (validations reach
  *    it minutes late) and is fresh until `poll_fresh_window_min` after the scan; the search
  *    gives up `place_give_up_hours` (6) after it.
+ * During Kyiv Digital's maintenance (MaintenanceState) passes make no API calls at all and
+ * resume within a minute of its end.
+ *
  * Every interval varies by ±20% (JITTER), re-rolled after each request, so the calls don't
  * form an exact rhythm. The worst case is about one /qr and one feed request every 24–36 s. Issuing or a ticket turning
  * used wakes a sleeping tracker. Failure backoff is added on top.
@@ -66,6 +70,7 @@ export class TicketTracker extends EventEmitter<TrackerEvents> {
     private readonly credentials: CredentialService,
     private readonly settings: SettingsService,
     private readonly audit: AuditService,
+    private readonly maintenance: MaintenanceState,
     private readonly clock: Clock,
     private readonly log: Logger,
     private readonly random: () => number = Math.random,
@@ -155,6 +160,13 @@ export class TicketTracker extends EventEmitter<TrackerEvents> {
 
   /** Delay until the next pass: the earlier of the two endpoints' due times, at most the idle cadence. */
   nextDelayMs(): number {
+    // Maintenance: no API calls until it ends; keep idle passes (images, liveness) and resume
+    // shortly after the end, with up to a minute of jitter.
+    const until = this.maintenance.until;
+    if (until !== null) {
+      const resume = until - this.clock.now() + this.random() * 60_000;
+      return Math.max(1000, Math.min(this.ms('poll_idle_interval_sec') * this.jitter(), resume));
+    }
     const now = Date.now();
     const due = [now + this.ms('poll_idle_interval_sec') * this.jitter()];
     if (this.tickets.hasActive()) due.push(this.lastQrAt + this.qrIntervalMs());
@@ -186,7 +198,7 @@ export class TicketTracker extends EventEmitter<TrackerEvents> {
     const isDue = (last: number, interval: number) => force || Date.now() - last >= interval - 500;
     try {
       await this.tickets.retireDueImages();
-      if (!this.credentials.usable()) return;
+      if (!this.credentials.usable() || this.maintenance.active()) return;
 
       if (this.tickets.hasActive() && isDue(this.lastQrAt, this.qrIntervalMs())) {
         this.lastQrAt = Date.now();
@@ -211,6 +223,7 @@ export class TicketTracker extends EventEmitter<TrackerEvents> {
         this.log.error({ err }, 'tracker pass failed');
         return;
       }
+      if (err.kind === 'maintenance') return; // expected; the next passes skip the API until it ends
       // A rejected token has its own alert (credentials); don't double up.
       if (err.kind !== 'unauthorized' && ++this.failures >= DEGRADED_AFTER && !this.degraded) {
         this.degraded = true;

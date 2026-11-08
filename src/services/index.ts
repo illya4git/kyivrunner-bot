@@ -3,6 +3,7 @@ import type { Clock } from '../core/clock.js';
 import type { Logger } from '../core/logger.js';
 import type { Db } from '../db/client.js';
 import { KyivClient, type KyivClientOptions } from '../kyiv/client.js';
+import { MaintenanceState } from '../kyiv/maintenance.js';
 import { AccessService } from './access.js';
 import { AuditService } from './audit.js';
 import { CredentialService } from './credentials.js';
@@ -35,12 +36,14 @@ export function buildServices(c: ServiceConfig): Services {
   // The client and the credential service reference each other: the client asks for the
   // current credentials, the service validates new ones through the client.
   let credentials: CredentialService | undefined;
+  const maintenance = new MaintenanceState(c.clock);
   const kyiv = new KyivClient({
     baseUrl: c.kyivBaseUrl,
     clientAuth: c.kyivClientAuth,
     credentials: () => credentials?.usable() ?? null,
     ratePerMin: () => settings.get('api_rate_per_min'),
     log: c.log.child({ mod: 'kyiv' }),
+    maintenance,
     onStoredCredentialsResult: (r) => credentials?.observe(r),
     ...c.kyivClient,
   });
@@ -48,10 +51,11 @@ export function buildServices(c: ServiceConfig): Services {
 
   const places = new PlaceResolver(c.db, c.clock, kyiv, settings, audit, c.log.child({ mod: 'places' }));
   const tickets = new TicketService(c.db, c.clock, audit, settings, access, credentials, kyiv, places, c.log.child({ mod: 'tickets' }));
-  const tracker = new TicketTracker(tickets, credentials, settings, audit, c.clock, c.log.child({ mod: 'tracker' }), c.random);
+  maintenance.on('started', ({ until, message }) => audit.log({ kind: 'maintenance', data: { until, ...(message ? { message } : {}) } }));
+  const tracker = new TicketTracker(tickets, credentials, settings, audit, maintenance, c.clock, c.log.child({ mod: 'tracker' }), c.random);
 
   const stats = new StatsService(c.db, c.clock);
 
   access.ensureBootstrapAdmins();
-  return { clock: c.clock, log: c.log, settings, audit, access, credentials, kyiv, tickets, tracker, stats };
+  return { clock: c.clock, log: c.log, settings, audit, access, credentials, kyiv, maintenance, tickets, tracker, stats };
 }
