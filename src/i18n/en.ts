@@ -62,7 +62,7 @@ export const en: Messages = {
     `ID: <code>${p.id}</code>\n` +
     (p.username ? `Username: @${esc(p.username)}\n` : '') +
     `Role: ${esc(p.role)}\n` +
-    `Daily quota: ${p.quota}${p.quotaIsDefault ? ' (default)' : ''}\n` +
+    `Daily quota: ${p.quota === null ? 'no limit (admin)' : `${p.quota}${p.quotaIsDefault ? ' (default)' : ''}`}\n` +
     `Language: ${esc(p.locale)}`,
 
   lang: {
@@ -97,7 +97,7 @@ export const en: Messages = {
       `<b>${p.name}</b>\n` +
       `ID: <code>${p.id}</code>\n` +
       `Role: ${esc(p.role)}${p.bootstrap ? ' (from ADMIN_IDS)' : ''}\n` +
-      `Daily quota: ${p.quota}${p.quotaIsDefault ? ' (default)' : ''}\n` +
+      `Daily quota: ${p.quota === null ? 'no limit (admin)' : `${p.quota}${p.quotaIsDefault ? ' (default)' : ''}`}\n` +
       `Created: ${esc(p.created)}\n` +
       `Last seen: ${esc(p.lastSeen)}` +
       (p.pending ? '\n📨 Access request pending' : ''),
@@ -193,19 +193,19 @@ export const en: Messages = {
       (p.resent ? '🔁 <i>The previous message was deleted — this is the same ticket.</i>\n\n' : '') +
       `🎫 <b>${esc(p.label)}</b>\n` +
       `Valid until ${esc(p.until)} (${esc(p.date)})\n` +
-      `Today: ${p.used}/${p.limit}\n\n` +
+      `Today: ${p.used}${p.limit === null ? '' : `/${p.limit}`}\n\n` +
       `Scan the QR code at the validator.`,
     captionUsed: (p) =>
       (p.resent ? '🔁 <i>Re-sent for inspection.</i>\n\n' : '') +
       `✅ <b>${esc(p.label)}</b> — used at ${esc(p.time)}` +
-      (p.place ? `\n📍 ${esc(p.place)}` : '') +
+      (p.place ? `\n${esc(p.place)}` : '') +
       `\n\nShow this QR to a conductor if asked (until ${esc(p.until)}).`,
-    captionUsedFinal: (p) => `✅ <b>${esc(p.label)}</b> — used ${esc(p.date)} at ${esc(p.time)}` + (p.place ? `\n📍 ${esc(p.place)}` : ''),
+    captionUsedFinal: (p) => `✅ <b>${esc(p.label)}</b> — used ${esc(p.date)} at ${esc(p.time)}` + (p.place ? `\n${esc(p.place)}` : ''),
     captionExpired: (p) => `⌛ <b>${esc(p.label)}</b> — not used (${esc(p.date)}).\nThe trip went back to the card.`,
     pointer: (until, quota) => `⬆️ Your active QR ticket is above. Valid until ${esc(until)}.\n${quota}`,
     pointerUsed: (time, quota) => `⬆️ Your ticket was used at ${esc(time)}. You can show it to a conductor.\n${quota}`,
     placePending: 'finding the place…',
-    quotaLine: (used, limit) => `Today: ${used}/${limit}.`,
+    quotaLine: (used, limit) => `Today: ${used}${limit === null ? '' : `/${limit}`}.`,
     usedReply: (time, place) => `✅ Your QR ticket was used at ${esc(time)}${place ? ` — ${esc(place)}` : ''}.`,
     expiredReply: '⌛ Your QR ticket expired unused. The trip went back to the card.',
     btnRefresh: '🔄 Refresh status',
@@ -240,10 +240,12 @@ export const en: Messages = {
       reserve_trips: 'Stop issuing when the card has this many trips or fewer',
       low_balance_alert: 'Warn admins when this many trips or fewer are left',
       active_card_id: 'Active card (change it with /card)',
-      poll_interval_sec: 'How often fresh tickets are checked, seconds',
-      poll_idle_interval_sec: 'How often to check when no ticket is fresh, seconds',
-      poll_fresh_window_min: 'An unused ticket counts as fresh for this many minutes after issue',
+      poll_interval_sec: 'How often fresh tickets and places are checked, seconds',
+      poll_idle_interval_sec: 'How often to check otherwise, seconds',
+      poll_fresh_window_min: 'Minutes a ticket counts as fresh: after issue (while unused) and after the scan (place search)',
       place_match_window_sec: 'Max time difference when finding the place, seconds',
+      place_search_delay_min: 'Start looking for the place this many minutes after the scan',
+      place_give_up_hours: 'Stop looking for the place this many hours after the scan',
       api_rate_per_min: 'Kyiv Digital requests per minute',
       request_cooldown_hours: 'Wait before another /request after an ignore, hours',
       log_retention_days: 'How many days the event log is kept',

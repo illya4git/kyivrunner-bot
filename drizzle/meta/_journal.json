@@ -15,6 +15,13 @@
       "when": 1794052053408,
       "tag": "0001_ticket_label",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794171125077,
+      "tag": "0002_place_search",
+      "breakpoints": true
     }
   ]
 }

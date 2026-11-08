@@ -10,6 +10,7 @@ import { kyivErrorText } from '../kyiv-errors.js';
 import type { TicketView } from '../ticket-view.js';
 import { uk } from '../../i18n/uk.js';
 import { en } from '../../i18n/en.js';
+import { formatPlace } from '../place.js';
 
 /** The reply-keyboard button, in every language. */
 const QR_BUTTONS = [...new Set([uk.keyboard.qr, en.keyboard.qr])];
@@ -91,7 +92,7 @@ export function userTicketCommands(deps: BotDeps, view: TicketView): Composer<Bo
 }
 
 function deniedText(t: Messages, res: Extract<IssueResult, { kind: 'denied' }>): string {
-  if (res.reason === 'quota') return t.tickets.denied.quota(res.quota.used, res.quota.limit);
+  if (res.reason === 'quota') return t.tickets.denied.quota(res.quota.used, res.quota.limit ?? 0);
   return t.tickets.denied[res.reason];
 }
 
@@ -99,6 +100,6 @@ function historyLine(t: Messages, r: TicketRow): string {
   const date = kyivDate(r.issuedAt);
   if (r.status === 'active') return t.tickets.historyActive(date, kyivTime(r.expireAt));
   if (r.status === 'expired') return t.tickets.historyExpired(date);
-  const place = r.place ? (r.mode ? `${r.mode}, ${r.place}` : r.place) : undefined;
+  const place = formatPlace(r.mode, r.place);
   return t.tickets.historyUsed(date, kyivTime(r.usedAt ?? r.issuedAt), place);
 }

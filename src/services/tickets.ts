@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { and, count, desc, eq, gt, gte, inArray, isNull, lt, lte } from 'drizzle-orm';
+import { and, count, desc, eq, gt, gte, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
 import { kyivDay, type Clock } from '../core/clock.js';
 import type { Logger } from '../core/logger.js';
 import { Mutex } from '../core/mutex.js';
@@ -11,10 +11,11 @@ import { canGenerate, tripsLeft, type Code } from '../kyiv/schemas.js';
 import type { AccessService } from './access.js';
 import type { AuditService } from './audit.js';
 import type { CredentialService } from './credentials.js';
-import { MAX_PLACE_ATTEMPTS, type PlaceResolver } from './places.js';
+import type { PlaceOutcome, PlaceResolver } from './places.js';
 import type { SettingsService } from './settings.js';
 
-export type Quota = { used: number; limit: number };
+/** `limit` null = no per-user limit (admins). */
+export type Quota = { used: number; limit: number | null };
 
 export type DenyReason = 'paused' | 'no_credentials' | 'no_card' | 'quota' | 'global_cap' | 'reserve' | 'card_blocked';
 
@@ -60,6 +61,8 @@ export type TicketEvents = {
   generationBlocked: [];
   /** A new ticket was issued (the tracker switches to its fast cadence). */
   issued: [TicketRow];
+  /** Tickets turned used (the tracker schedules the place search). */
+  used: [];
 };
 
 export class TicketService extends EventEmitter<TicketEvents> {
@@ -148,7 +151,7 @@ export class TicketService extends EventEmitter<TicketEvents> {
     return this.db
       .select()
       .from(tickets)
-      .where(and(eq(tickets.status, 'used'), isNull(tickets.kdFeedEventId), lt(tickets.placeAttempts, MAX_PLACE_ATTEMPTS)))
+      .where(and(eq(tickets.status, 'used'), isNull(tickets.kdFeedEventId), isNotNull(tickets.placeSearchFrom), isNull(tickets.placeGaveUpAt)))
       .all();
   }
 
@@ -219,7 +222,7 @@ export class TicketService extends EventEmitter<TicketEvents> {
     if (active) return { kind: 'existing', ticket: active, quota: this.quota(user) };
 
     const quota = this.quota(user);
-    if (quota.used >= quota.limit) {
+    if (quota.limit !== null && quota.used >= quota.limit) {
       this.audit.log({ kind: 'quota_denied', tgId: user.tgId, role: user.role, data: { ...quota } });
       const inspectable = this.inspectableFor(user.tgId);
       return deny('quota', inspectable ? { inspectable } : {});
@@ -334,28 +337,34 @@ export class TicketService extends EventEmitter<TicketEvents> {
       const code = byId.get(t.kdTicketId);
       let to: TicketTransition['to'] | null = null;
       let usedAt: number | null = null;
+      let data: Record<string, unknown> = {};
       if (code?.used_at != null) {
         to = 'used';
         usedAt = code.used_at * 1000;
+        data = { reportedAfterSec: Math.round((now - usedAt) / 1000) };
       } else if ((code ? code.expire_at * 1000 : t.expireAt) <= now) {
         to = 'expired';
+      } else if (!code) {
+        // Used codes leave /qr about 2 hours after the scan. Gone before expiry = used while
+        // we weren't looking; the time and place come from the feed.
+        to = 'used';
+        data = { missingFromList: true };
       }
       if (!to) continue;
 
       const claimed = this.db
         .update(tickets)
-        .set({ status: to, usedAt })
+        .set({ status: to, usedAt, ...(to === 'used' ? { placeSearchFrom: usedAt ?? now } : {}) })
         .where(and(eq(tickets.id, t.id), eq(tickets.status, 'active')))
         .returning()
         .get();
       if (!claimed) continue;
-      this.audit.log({ kind: to === 'used' ? 'ticket_used' : 'ticket_expired', tgId: t.userTgId, data: { ticket: t.id, kd: t.kdTicketId } });
+      this.audit.log({ kind: to === 'used' ? 'ticket_used' : 'ticket_expired', tgId: t.userTgId, data: { ticket: t.id, kd: t.kdTicketId, ...data } });
       out.push({ ticket: claimed, to });
     }
+    if (out.some((tr) => tr.to === 'used')) this.emit('used');
 
     for (const tr of out) {
-      // Try the place right away, so the first notification can already say where.
-      if (tr.to === 'used') tr.ticket = (await this.tryResolvePlace(tr.ticket)).ticket;
       try {
         await this.presenter.transition(tr);
       } catch (err) {
@@ -365,17 +374,16 @@ export class TicketService extends EventEmitter<TicketEvents> {
     return out;
   }
 
-  /** One more lookup for every used ticket whose place is still unknown. */
-  async resolvePendingPlaces(): Promise<void> {
-    for (const t of this.pendingPlaces()) {
-      const r = await this.tryResolvePlace(t);
-      if (r.outcome === 'retry') continue;
+  /** One feed lookup for the given pending tickets; found or given-up places are rendered. Throws KyivError. */
+  async resolvePlaces(pending: TicketRow[]): Promise<void> {
+    await this.places.resolve(pending, async (r: PlaceOutcome) => {
+      if (r.outcome === 'retry') return;
       try {
         await this.presenter.placeUpdated(r.ticket);
       } catch (err) {
-        this.log.error({ err, ticket: t.id }, 'failed to render a resolved place');
+        this.log.error({ err, ticket: r.ticket.id }, 'failed to render a resolved place');
       }
-    }
+    });
   }
 
   /** Swap the QR image of used tickets that passed midnight (no API calls). */
@@ -390,15 +398,5 @@ export class TicketService extends EventEmitter<TicketEvents> {
       this.markImageRetired(t.id); // once: a failed edit isn't worth repeated attempts
     }
     return due.length;
-  }
-
-  private async tryResolvePlace(t: TicketRow): Promise<{ outcome: 'found' | 'retry' | 'gave_up'; ticket: TicketRow }> {
-    try {
-      return await this.places.resolve(t);
-    } catch (err) {
-      if (!isKyivError(err)) throw err;
-      this.log.warn({ kind: err.kind, ticket: t.id }, 'feed unavailable; place stays pending');
-      return { outcome: 'retry', ticket: t };
-    }
   }
 }

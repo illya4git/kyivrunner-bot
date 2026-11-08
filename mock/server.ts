@@ -147,7 +147,7 @@ export class MockKyivServer {
       clock_offset_sec: s.clockOffsetSec,
       stations: STATIONS,
       cards: s.cards.map((c) => s.cardView(c.id)),
-      codes: s.codeList(),
+      codes: s.allCodes(),
       feed: Object.fromEntries(s.cards.map((c) => [c.id, s.feed(c.id, 1, 100)])),
       tokens: [...s.tokens.values()],
       faults: this.faults,

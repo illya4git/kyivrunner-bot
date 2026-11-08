@@ -21,15 +21,18 @@ Operations: [README.md](README.md)
 | 6. Admin reporting | `/settings` `/set` `/pause` `/resume` `/stats` `/logs` `/export`, alerts, pruning | ✅ Done |
 | 7. Ship | Dockerfile, compose files, backups, healthcheck, runbook | ✅ Done. amd64 verified; arm64 not built yet. |
 | — Publish | Public GitHub repo, secret scrubbed from history, no-reply author email | ✅ Done |
-| 8. Live smoke test | Deploy on the target box, real `/qr`, use/expiry, place, backups, health | ⏳ Next |
+| 8. Live smoke test | Deploy on the target box, real `/qr`, use/expiry, place, backups, health | 🔄 In progress: deployed; issue, use and expiry work live; place lookup reworked after the first live run (D30) |
 
 ### Verification status
 
 | Item | Status |
 |---|---|
 | Request envelope and card listing against the real API | **Verified live** (credential entry and `/card`) |
-| Generate, `/qr` list, feed, ticket lifecycle | Verified against the mock only; **phase 8** |
-| Feed lag in practice (how soon `val_` appears after a scan) | Unknown; `place_match_window_sec` and the 4-attempt budget are guesses |
+| Generate, `/qr` list, ticket use and expiry | **Verified live** (2026-11-07/08: 6 tickets issued, 4 used, 1 expired) |
+| `used_at` vs the feed's `created_at` | **Verified live:** equal to the second |
+| `/qr` lag (scan → `used_at` visible) | **Observed live:** 1–8 minutes |
+| Feed lag (scan → `val_` visible) | Longer than `/qr`'s; not measured yet. `place_found` events now record it (`foundAfterSec`) |
+| Used codes drop out of `/qr` ~2 h after the scan | **Observed live:** one code listed at 1 h 26 min and gone at 2 h 02 min after its scan; another gone at 3.8 h. The bot (D31) and the mock handle it |
 | Error responses the mock guessed (422 on a blocked or empty card, 401 on a device mismatch) | Unverified. The client handles any 4xx either way. |
 | Token refresh (`/auth/refresh`) | Not used: tokens are re-entered by admins |
 | Docker image on amd64 | Built and run here (migrations, non-root, config errors, mock image) |
@@ -60,7 +63,7 @@ Operations: [README.md](README.md)
 | D16 | **Token hygiene everywhere:** any message that looks like a JWT is deleted, whoever sends it; JWTs inside commands are logged as `[jwt]`; free text is logged by length only. |
 | D17 | **GETs are retried, generate never is.** A generate whose response was lost is reconciled against a code snapshot taken just before generating, instead of reserving a second trip. |
 | D18 | The **tracker sync runs under the issuing lock**, so a code mid-issue is never mistaken for a foreign one. **No separate midnight cron:** the tracker handles expiry and image retirement within one poll interval. |
-| D19 | **Place lookup:** one attempt the moment a code turns used, then up to 3 tracker retries. The first caption and reply say "finding the place…" and are edited once it's known. A feed event is linked to at most one ticket (an in-code filter plus a unique column). |
+| D19 | ~~Place lookup: one attempt the moment a code turns used, then up to 3 tracker retries.~~ Replaced by D30. Still true: The first caption and reply say "finding the place…" and are edited once it's known. A feed event is linked to at most one ticket (an in-code filter plus a unique column). |
 | D20 | The **mock control panel** was moved up (shipped after phase 4). It's served by the mock at `/_mock/`. The mock's request log records only `/api/*` calls. |
 | D21 | `npm run dev:mock` **resets the bot's mock database on each start** (users and roles kept), provisions dev credentials and the card, and makes the mock follow the bot's clock. |
 | D22 | **`/dev clock`** (`+2h`, `-30m`, `+1d`, `midnight`, `reset`) and **`/dev tick`** for admins in DEV_MODE. |
@@ -70,7 +73,11 @@ Operations: [README.md](README.md)
 | D26 | Compose keeps secrets in **`.env` via `env_file`**, without listing variables in the compose file. |
 | D27 | **Health** = polling Telegram and a recent tracker pass (within the slower poll interval + max backoff + 5 min: 15 min by default). Credential problems are reported, but don't fail the check (a restart wouldn't fix them). |
 | D28 | `TELEGRAM_TEST_ENV` switches to Telegram's test servers. The fake Telegram in tests validates HTML the way Telegram does. |
-| D29 | **Adaptive polling:** fast (30s) only while a ticket issued in the last 15 min is unused or a place is pending; otherwise 5 min. Most codes are scanned soon after issue; for an older one the user can press 🔄 or send /status, and expiry is reported within 5 min of midnight. Issuing wakes the tracker. All three values are settings. |
+| D29 | **Adaptive polling:** fast (30s) `/qr` only while a ticket issued in the last 15 min is unused; otherwise 5 min (the feed got its own cadence in D30). Most codes are scanned soon after issue; for an older one the user can press 🔄 or send /status, and expiry is reported within 5 min of midnight. Issuing wakes the tracker. All three values are settings. |
+| D30 | **Scheduled place search** (after the first live run, where all 4 lookups gave up before the feed caught up): the feed has its own cadence, like `/qr`. A used ticket is searched from `place_search_delay_min` (5) after its scan, every 30 s until 15 min after the scan, then every 5 min, giving up after `place_give_up_hours` (6). One feed request per card serves every pending ticket, so the worst case is one `/qr` and one feed call every 30 s. The default `place_match_window_sec` dropped to 30, since matches are exact. Places are shown as `🚇 Метро · Видубичі 1 (захід)` / `🚌 Автобус №87 · МАЗ 215-069` (on surface transport the "place" is often the vehicle). |
+| D31 | **A code missing from `/qr` before its expiry counts as used** (used codes drop out ~2 h after the scan). Its time and place come from the earliest unclaimed `val_` event between issue and the moment it went missing. Without this, a ticket used while the bot was down for 2+ hours was reported "expired unused" at midnight. |
+| D32 | **Admins have no per-user daily quota** (they can change quotas anyway). The global daily cap and the trip reserve still apply to them. A quota stored for an admin takes effect if they're demoted. |
+| D33 | **Polling jitter:** every tracker interval (`/qr`, feed, idle pass) varies by ±20%, re-rolled after each request, so the calls don't form an exact rhythm. The place-search delay and give-up time are not jittered. |
 
 ---
 
@@ -172,18 +179,27 @@ Rules:
 |---|---|
 | Issued | Send photo + caption + [🔄] |
 | Repeat request / `/status` | Reply to it; re-send once if it's gone |
-| Used | Edit the **caption only** (the QR stays), remove the button; **reply** "✅ used at 08:14 — Metro, Khreshchatyk" (or "finding the place…") |
-| Place found later | Edit the caption and the earlier reply; no new notification |
-| Place given up | Edit the "finding the place…" note away |
+| Used | Edit the **caption only** (the QR stays), remove the button; **reply** "✅ used at 08:14 — 📍 finding the place…" |
+| Place found (from 5 min after the scan) | Edit the caption and the earlier reply; no new notification |
+| Place given up (6 h after the scan) | Edit the "finding the place…" note away |
 | Expired | Swap in the ⏰ placeholder + caption; **reply** "⌛ expired unused" |
 | Used, after midnight | Silently swap in the ✓ placeholder with a final caption |
 | Message deleted | Mark it gone; notify with a standalone text message |
 
 ### Tracking (TicketTracker)
-Every `poll_interval_sec` (30s) while a ticket issued within `poll_fresh_window_min` (15) is unused or a place lookup is pending, otherwise every `poll_idle_interval_sec` (5 min). Issuing a ticket wakes the tracker into the fast cadence; 30s–5min of backoff is added after Kyiv Digital failures:
+Two endpoints, each with its own cadence: `poll_interval_sec` (30s) when fresh, otherwise `poll_idle_interval_sec` (5 min). The loop wakes when either is due; 30s–5min of backoff is added after Kyiv Digital failures.
+
+| Endpoint | Fresh (30s) | Otherwise (5 min) | Stops |
+|---|---|---|---|
+| `/qr` | a ticket issued < `poll_fresh_window_min` (15) ago is unused | any ticket active | nothing active |
+| feed | a pending place's scan was 5–15 min ago | any place pending (from 5 min after the scan) | found, or `place_give_up_hours` (6) after the scan |
+
+Each pass:
 1. Retire used images past midnight (DB only).
-2. If anything is active: list codes under the issuing lock → transitions; log foreign codes once.
-3. Retry pending place lookups.
+2. If `/qr` is due: list codes under the issuing lock → transitions (a code missing before expiry = used, D31); log foreign codes once.
+3. If the feed is due: one request per card, matched against every searchable pending ticket.
+
+Issuing (which just listed the codes) and a ticket turning used wake the tracker.
 
 The first pass runs at startup and reconciles anything that happened while the bot was down. Idle passes make no API calls. A rejected token stops all calls until it's fixed.
 
@@ -206,16 +222,16 @@ settings(key PK, value, updated_by, updated_at)
 
 tickets(id PK, kd_ticket_id UNIQUE, user_tg_id → users, card_id, code, kyiv_day, label,
         status ('active'|'used'|'expired'), issued_at, expire_at, used_at,
-        place, mode, kd_feed_event_id UNIQUE, place_attempts,
+        place, mode, kd_feed_event_id UNIQUE, place_attempts, place_search_from, place_gave_up_at,
         chat_id, message_id, message_gone, resend_count, status_reply_id, image_retired)
 
 events(id PK, ts, tg_id NULL, role_at_time, kind, data JSON)
 ```
 
-Migrations: `0000_init`, `0001_ticket_label`.
+Migrations: `0000_init`, `0001_ticket_label`, `0002_place_search` (also re-opens the search for used tickets that never got a place).
 
 Event kinds: `interaction`, `denied`, `access_requested`, `access_request_ignored`, `ticket_issued`,
-`ticket_pointed`, `ticket_resent`, `ticket_used`, `ticket_expired`, `place_unresolved`, `quota_denied`,
+`ticket_pointed`, `ticket_resent`, `ticket_used` (with `reportedAfterSec` or `missingFromList`), `ticket_expired`, `place_found` (with `foundAfterSec`), `place_unresolved`, `quota_denied`,
 `cap_denied`, `role_changed`, `quota_changed`, `locale_changed`, `setting_changed`, `credentials_set`,
 `credentials_cleared`, `credentials_invalid`, `credentials_expiring`, `api_error`, `foreign_code`,
 `paused`, `resumed`, `admin_alert`, `exported`.
@@ -231,10 +247,12 @@ Event kinds: `interaction`, `denied`, `access_requested`, `access_request_ignore
 | `reserve_trips` | 4 | Stop issuing at this many trips or fewer |
 | `low_balance_alert` | 8 | Alert admins at this many trips or fewer |
 | `active_card_id` | — | Set via `/card` or credential setup |
-| `poll_interval_sec` | 30 | Tracker cadence for fresh tickets and pending places |
-| `poll_idle_interval_sec` | 300 | Tracker cadence otherwise |
-| `poll_fresh_window_min` | 15 | How long after issue an unused ticket keeps the fast cadence |
-| `place_match_window_sec` | 120 | Max gap between `used_at` and the feed event |
+| `poll_interval_sec` | 30 | Fresh cadence for `/qr` and the feed |
+| `poll_idle_interval_sec` | 300 | Cadence otherwise |
+| `poll_fresh_window_min` | 15 | Fresh = issued (unused) or scanned this recently |
+| `place_match_window_sec` | 30 | Max gap between `used_at` and the feed event |
+| `place_search_delay_min` | 5 | Start the place search this long after the scan |
+| `place_give_up_hours` | 6 | Stop the place search this long after the scan |
 | `api_rate_per_min` | 20 | Self-imposed Kyiv Digital limit |
 | `request_cooldown_hours` | 24 | Wait before another `/request` after an ignore |
 | `log_retention_days` | 365 | Event pruning |
@@ -318,6 +336,6 @@ On the target box (residential connection), with the real account:
 
 ### Open items
 - arm64 image build (happens on the Pi, or with QEMU on the dev host).
-- Tune `place_match_window_sec` and the place-attempt budget once real feed lag is known.
+- Read `foundAfterSec` from `place_found` events and tune `place_search_delay_min` / `place_give_up_hours`.
 - Restore drill from a backup.
 - `npm audit`: a moderate advisory in drizzle-kit's bundled esbuild (dev-only, not in the image).

@@ -155,6 +155,17 @@ Response:
 | `expire_at` | Unix expiry (end of the day the ticket is valid for). |
 | `shared` / `shared_at` | Whether the code was shared. |
 | `qr_texts.label.text` | Card class label shown under the QR. |
+| `card_type`, `name`, `icon_url` | Seen as `null`. |
+
+### Timing and which codes are listed (observed on the live API, 2026-11-07/08)
+- **`used_at` appears late.** A scan shows up in `/qr` **1–8 minutes** after it happened, with
+  `used_at` set back to the actual scan time. Poll for it; don't expect it the moment the rider
+  passes the gate.
+- **The list holds only today's codes.** Unused codes vanish once they expire at midnight.
+- **A used code drops out about 2 hours after the scan** (one code was listed 1 h 26 min after its
+  scan and gone at 2 h 02 min; another was gone at 3.8 h). A client that wasn't polling then can't read `used_at`
+  any more. If a code it issued is missing **before** its `expire_at`, it was used; take the time
+  and place from the feed (§6).
 
 **Rendering:** the QR image is produced **client-side** from `code` — there is no server endpoint that
 returns the QR bitmap for a ticket. Encode `code` as a QR (the validator scans that string).
@@ -188,12 +199,35 @@ The event kind is given by `type` (and mirrored in the `id` prefix):
 
 `created_at` is the unix timestamp of every event.
 
+More detail on the event kinds (observed on the live API):
+- **`val_` (validation):** for the metro (and the funicular) `title` is `Метро` and `description` the
+  station gate, e.g. `Видубичі 1 (захід)`. On **buses, trolleybuses and trams** `title` includes the
+  route (`Автобус №87`, `Тролейбус №38`) and `description` is often the **vehicle**, not a stop:
+  the model and board number (`МАЗ 215-069`, `Mercedes 0530 Citaro`) or just the number (`Т90110`).
+  Trams may name the stop (`Станція «Старовокзальна» 2`). `value_text` is `HH:MM` in Kyiv time.
+  The numeric part of the id is assigned when the validation **reaches the server**, so ids are not
+  in scan order (e.g. a scan at 21:20:00 has a lower id than one at 21:19:56).
+- **`qrt_<code id>`:** the suffix is the CODE `id` from §4, so a client can tell its own codes apart.
+- **`eqr_<unix time>`:** one event per expiry batch at 23:59:59 Kyiv time, e.g.
+  `Сплив термін 4 QR-квитків` / `Поїздки повернулися на карту` for four codes at once.
+- `feed.meta` holds pagination info. The feed lists every validation on the card: QR codes, the
+  physical card, and codes generated in the phone app.
+
 ### Getting "where & when a QR was spent"
 - **When** a given code was used → the code's `used_at` from `GET /api/v4/qr` (§4).
 - **Where + when** the trip happened → the **`type:1` / `val_`** feed events:
-  `description` = location (named station/stop; **no GPS coordinates**), `title` = mode, `created_at` / `value_text` = time.
-- A `val_` event does **not** carry the `qrt_` code id it consumed. To link a specific code to its validation,
-  **match the code's `used_at` to a `val_` event's `created_at`** (timestamps align).
+  `description` = station or vehicle (**no GPS coordinates**), `title` = mode (and route), `created_at` / `value_text` = time.
+- A `val_` event does **not** carry the code id it consumed. To link a code to its validation,
+  **match the code's `used_at` to a `val_` event's `created_at`: they are equal to the second**
+  (verified on two live scans). Two codes can be scanned seconds apart at the same gate, so take the
+  closest event and never assign one event to two codes.
+- **Validations reach the feed late,** after they reach `/qr`; how late isn't measured yet. In one
+  session none of four validations was in the feed about 1 minute after `/qr` reported the code as
+  used, and all of them were there hours later. Keep looking for a while (the bot searches from
+  5 minutes after the scan, every 30 s for the first 15 minutes, then every 5 minutes, for up to
+  6 hours).
+- For a code that dropped out of `/qr` before the client saw it used (§4), take the earliest
+  unclaimed `val_` event between the code's creation and the moment it went missing.
 
 > Note: the per-card `info` block (on `/feed`, for pupil/school cards) may include personal data
 > (holder full name, photo URL, school, PIN). Treat the feed response as sensitive.

@@ -66,6 +66,19 @@ describe('TicketService', () => {
     expect((await s.tickets.issue(s.row(5))).kind).toBe('issued');
   });
 
+  it('has no per-user quota for admins, but the global cap still applies', async () => {
+    const s = await setup();
+    s.access.touch({ id: ADMIN_ID, first_name: 'Admin' });
+    s.settings.set('default_daily_quota', 1, ADMIN_ID);
+    s.settings.set('global_daily_cap', 3, ADMIN_ID);
+    for (let i = 0; i < 3; i++) {
+      const r = await s.tickets.issue(s.row(ADMIN_ID));
+      expect(r).toMatchObject({ kind: 'issued', quota: { used: i + 1, limit: null } });
+      s.state.validate(r.kind === 'issued' ? r.ticket.kdTicketId : 0);
+    }
+    expect(await s.tickets.issue(s.row(ADMIN_ID))).toMatchObject({ kind: 'denied', reason: 'global_cap' });
+  });
+
   it('enforces the global cap, the trip reserve, and card/paused/credential preconditions', async () => {
     const s = await setup();
     s.user(5);

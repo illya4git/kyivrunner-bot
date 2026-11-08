@@ -8,6 +8,7 @@ import { renderQr } from '../qr/render.js';
 import type { AccessService } from '../services/access.js';
 import type { AuditService } from '../services/audit.js';
 import { placePending } from '../services/places.js';
+import { formatPlace } from './place.js';
 import type { Quota, TicketPresenter, TicketService, TicketTransition } from '../services/tickets.js';
 
 const REPLY_TARGET_GONE = /message to be replied not found|replied message not found/i;
@@ -209,12 +210,11 @@ export class TicketView implements TicketPresenter {
 }
 
 function placeOrPending(t: Messages, ticket: TicketRow): string | undefined {
-  return placeText(ticket) ?? (placePending(ticket) ? t.tickets.placePending : undefined);
+  return placeText(ticket) ?? (placePending(ticket) ? `📍 ${t.tickets.placePending}` : undefined);
 }
 
 function placeText(ticket: TicketRow): string | undefined {
-  if (!ticket.place) return undefined;
-  return ticket.mode ? `${ticket.mode}, ${ticket.place}` : ticket.place;
+  return formatPlace(ticket.mode, ticket.place);
 }
 
 function isTelegramError(err: unknown, re: RegExp): boolean {

@@ -12,11 +12,12 @@ admin-approved group, without sharing the account's credentials.
 - People write to the bot. Strangers are **guests**: they're logged and can ask for access with
   `/request`. Admins approve them as **users**.
 - A user taps **🎫 QR** and gets a QR code generated from the owner's Kyiv Digital account. Each
-  user has at most one active code at a time and a daily quota. A global daily cap and a trip
+  user has at most one active code at a time and a daily quota (admins have none). A global daily cap and a trip
   reserve protect the owner's monthly balance.
 - Each ticket lives in **one Telegram message**. A repeat request replies to it. When the code is
-  used, the caption shows the time and place and the QR stays for conductor re-scans; it's
-  swapped for a placeholder after midnight. Unused codes expire at midnight (the trip returns to
+  used, the caption shows the time and the QR stays for conductor re-scans; the place (station,
+  or the vehicle on buses and trams) is added once Kyiv Digital's trip history has it, usually
+  some minutes later. The QR is swapped for a placeholder after midnight. Unused codes expire at midnight (the trip returns to
   the card). Every status change also sends a short reply, so the user gets a notification.
 - Admins manage access, quotas and settings, and see stats, logs and CSV exports.
 - The Kyiv Digital token is supplied by an admin in the chat, encrypted at rest, and watched:
@@ -125,6 +126,9 @@ it. `/credentials check` re-tests the stored token.
   reports recovery. Check the box's internet connection if it persists.
 - *Users see "limit used up"*: check `/stats today`, then adjust `/quota` or `/set default_daily_quota`.
 - *Users see "running out of trips"*: the balance reached `reserve_trips`. Top up the card, or lower the reserve.
+- *A ticket never gets its place*: the trip history hadn't listed the scan 6 hours later
+  (`place_give_up_hours`). `/logs` shows `place_unresolved`; `place_found` events show how long
+  lookups usually take (`foundAfterSec`).
 - *Response shape errors in the log*: Kyiv Digital changed its API. The log names the fields that
   differ. Compare with [docs/](docs/README.md).
 
@@ -166,7 +170,8 @@ containers.
 **Control panel:** http://127.0.0.1:8787/. From there you can change the card's trips and blocked
 flags, scan a QR at a chosen station (with optional feed delay) or expire it, watch the feed,
 copy, issue or revoke tokens, inject faults and latency, move the mock clock, and follow a live
-log of API requests. The same actions are available as JSON:
+log of API requests. Like the real API, `/qr` stops listing a used code 2 hours after the scan.
+The same actions are available as JSON:
 
 | Endpoint | Effect |
 |---|---|

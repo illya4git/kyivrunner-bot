@@ -18,12 +18,12 @@ export async function closeTicketEnvs(): Promise<void> {
  * Bot + services + mock Kyiv Digital sharing one clock (default: FakeClock at
  * 2026-11-07 10:00 Kyiv), with dev credentials saved and the student card active.
  */
-export async function ticketEnv<C extends Clock = FakeClock>(opts: { clock?: C } = {}) {
+export async function ticketEnv<C extends Clock = FakeClock>(opts: { clock?: C; random?: () => number } = {}) {
   const clock = (opts.clock ?? new FakeClock(Date.UTC(2026, 10, 7, 8))) as C;
   const mock = new MockKyivServer(new MockState(() => clock.now()));
   open.push(mock);
   const url = await mock.listen();
-  const s = makeServices({ kyivUrl: url, clock });
+  const s = makeServices({ kyivUrl: url, clock, ...(opts.random ? { random: opts.random } : {}) });
   const dev = mock.state.devToken;
   s.credentials.save({ accessToken: dev.token, deviceUuid: dev.deviceUuid }, ADMIN_ID);
   s.settings.set('active_card_id', STUDENT_CARD_ID, ADMIN_ID);

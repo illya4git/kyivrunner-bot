@@ -13,6 +13,7 @@ export const EVENT_KINDS = [
   'ticket_resent',
   'ticket_used',
   'ticket_expired',
+  'place_found',
   'place_unresolved',
   'quota_denied',
   'cap_denied',

@@ -22,7 +22,7 @@ export const TEST_KEY = Buffer.alloc(32, 7);
  * The real service graph over an in-memory DB. `kyivUrl` defaults to an address nothing
  * listens on, so tests that don't start the mock fail fast if they touch the API.
  */
-export function makeServices<C extends Clock = FakeClock>(opts: { adminIds?: number[]; kyivUrl?: string; clock?: C } = {}) {
+export function makeServices<C extends Clock = FakeClock>(opts: { adminIds?: number[]; kyivUrl?: string; clock?: C; random?: () => number } = {}) {
   const clock = (opts.clock ?? new FakeClock()) as C;
   const db = openDb(':memory:');
   const services = buildServices({
@@ -34,6 +34,7 @@ export function makeServices<C extends Clock = FakeClock>(opts: { adminIds?: num
     kyivBaseUrl: opts.kyivUrl ?? 'http://127.0.0.1:9',
     kyivClientAuth: MOCK_CLIENT_AUTH,
     kyivClient: { sleep: async () => undefined, getRetries: 0 },
+    random: opts.random ?? (() => 0.5), // no polling jitter unless a test asks for it
   });
   return { ...services, clock, db };
 }

@@ -86,7 +86,15 @@ export const tickets = sqliteTable(
     place: text('place'),
     mode: text('mode'),
     kdFeedEventId: text('kd_feed_event_id').unique(),
+    /** Feed lookups made so far (informational). */
     placeAttempts: integer('place_attempts').notNull().default(0),
+    /**
+     * When the place search starts counting from: the code's used_at, or, for a code that left
+     * /qr before the bot saw it used, the time that was noticed. Null when no search is due.
+     */
+    placeSearchFrom: integer('place_search_from'),
+    /** The place search gave up at this time. */
+    placeGaveUpAt: integer('place_gave_up_at'),
     chatId: integer('chat_id'),
     messageId: integer('message_id'),
     messageGone: integer('message_gone', { mode: 'boolean' }).notNull().default(false),

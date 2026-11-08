@@ -76,6 +76,9 @@ export class MockError extends Error {
   }
 }
 
+/** The real /qr stops listing a used code about 2 hours after the scan (observed 2026-11-08). */
+export const USED_CODE_LISTED_SEC = 2 * 3600;
+
 /**
  * In-memory Kyiv Digital account. All domain rules of the real service that the bot
  * depends on live here: trip reservation on generate, midnight return of unused trips,
@@ -169,8 +172,15 @@ export class MockState {
     return { ...c, qrs_count: this.codes.filter((q) => q.card_id === id && q.expire_at > now).length };
   }
 
-  codeList(): MockCode[] {
+  /** Every code, including used ones /qr no longer lists (control panel). */
+  allCodes(): MockCode[] {
     return this.codes.map(({ returned: _r, ...c }) => c);
+  }
+
+  /** Like the real /qr: a used code drops out of the list USED_CODE_LISTED_SEC after the scan. */
+  codeList(): MockCode[] {
+    const now = this.nowSec();
+    return this.codes.filter((c) => c.used_at === null || now - c.used_at < USED_CODE_LISTED_SEC).map(({ returned: _r, ...c }) => c);
   }
 
   feed(cardId: number, page: number, perPage: number): MockFeedEvent[] {
@@ -225,7 +235,7 @@ export class MockState {
     code.used_at = now;
     this.qrVersion++;
     const event = this.pushEvent(code.card_id, 1, station.mode, station.place, kyivTime(now * 1000), now, now + (o.feedDelaySec ?? 0));
-    return { code: this.codeList().find((c) => c.id === codeId)!, event };
+    return { code: this.allCodes().find((c) => c.id === codeId)!, event };
   }
 
   /** A trip validated without a QR (e.g. the physical card) — a decoy for place matching. */
@@ -243,7 +253,7 @@ export class MockState {
     if (code.used_at !== null) throw new MockError(409, 'code already used');
     code.expire_at = Math.min(code.expire_at, this.nowSec() - 1);
     this.tick();
-    return this.codeList().find((c) => c.id === codeId)!;
+    return this.allCodes().find((c) => c.id === codeId)!;
   }
 
   /** Jump the clock to just after the next Kyiv midnight. */

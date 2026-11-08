@@ -20,6 +20,8 @@ export type ServiceConfig = {
   encryptionKey: Buffer;
   kyivBaseUrl: string;
   kyivClientAuth: string;
+  /** Source of polling jitter (tests pin it). */
+  random?: () => number;
   /** Test hooks for the HTTP client (sleep, timeouts). */
   kyivClient?: Partial<KyivClientOptions>;
 };
@@ -44,9 +46,9 @@ export function buildServices(c: ServiceConfig): Services {
   });
   credentials = new CredentialService(c.db, c.clock, audit, c.encryptionKey, c.log, async (creds) => (await kyiv.listCards(creds)).cards);
 
-  const places = new PlaceResolver(c.db, kyiv, settings, audit, c.log.child({ mod: 'places' }));
+  const places = new PlaceResolver(c.db, c.clock, kyiv, settings, audit, c.log.child({ mod: 'places' }));
   const tickets = new TicketService(c.db, c.clock, audit, settings, access, credentials, kyiv, places, c.log.child({ mod: 'tickets' }));
-  const tracker = new TicketTracker(tickets, credentials, settings, audit, c.clock, c.log.child({ mod: 'tracker' }));
+  const tracker = new TicketTracker(tickets, credentials, settings, audit, c.clock, c.log.child({ mod: 'tracker' }), c.random);
 
   const stats = new StatsService(c.db, c.clock);
 

@@ -59,12 +59,12 @@ export const uk = {
 
   keyboard: { qr: '🎫 QR' },
 
-  whoami: (p: { id: number; role: string; username: string | null; quota: number; quotaIsDefault: boolean; locale: string }) =>
+  whoami: (p: { id: number; role: string; username: string | null; quota: number | null; quotaIsDefault: boolean; locale: string }) =>
     `<b>Профіль</b>\n` +
     `ID: <code>${p.id}</code>\n` +
     (p.username ? `Username: @${esc(p.username)}\n` : '') +
     `Роль: ${esc(p.role)}\n` +
-    `Денна квота: ${p.quota}${p.quotaIsDefault ? ' (типова)' : ''}\n` +
+    `Денна квота: ${p.quota === null ? 'без обмежень (адміністратор)' : `${p.quota}${p.quotaIsDefault ? ' (типова)' : ''}`}\n` +
     `Мова: ${esc(p.locale)}`,
 
   lang: {
@@ -99,7 +99,7 @@ export const uk = {
       name: string;
       id: number;
       role: string;
-      quota: number;
+      quota: number | null;
       quotaIsDefault: boolean;
       created: string;
       lastSeen: string;
@@ -109,7 +109,7 @@ export const uk = {
       `<b>${p.name}</b>\n` +
       `ID: <code>${p.id}</code>\n` +
       `Роль: ${esc(p.role)}${p.bootstrap ? ' (з ADMIN_IDS)' : ''}\n` +
-      `Денна квота: ${p.quota}${p.quotaIsDefault ? ' (типова)' : ''}\n` +
+      `Денна квота: ${p.quota === null ? 'без обмежень (адміністратор)' : `${p.quota}${p.quotaIsDefault ? ' (типова)' : ''}`}\n` +
       `Створено: ${esc(p.created)}\n` +
       `Востаннє: ${esc(p.lastSeen)}` +
       (p.pending ? '\n📨 Очікує на доступ' : ''),
@@ -222,25 +222,25 @@ export const uk = {
   },
 
   tickets: {
-    caption: (p: { label: string; until: string; date: string; used: number; limit: number; resent: boolean }) =>
+    caption: (p: { label: string; until: string; date: string; used: number; limit: number | null; resent: boolean }) =>
       (p.resent ? '🔁 <i>Попереднє повідомлення було видалено — це той самий квиток.</i>\n\n' : '') +
       `🎫 <b>${esc(p.label)}</b>\n` +
       `Дійсний до ${esc(p.until)} (${esc(p.date)})\n` +
-      `Сьогодні: ${p.used}/${p.limit}\n\n` +
+      `Сьогодні: ${p.used}${p.limit === null ? '' : `/${p.limit}`}\n\n` +
       `Відскануйте QR-код на валідаторі.`,
     captionUsed: (p: { label: string; time: string; place?: string | undefined; until: string; resent: boolean }) =>
       (p.resent ? '🔁 <i>Надіслано повторно для перевірки.</i>\n\n' : '') +
       `✅ <b>${esc(p.label)}</b> — використано о ${esc(p.time)}` +
-      (p.place ? `\n📍 ${esc(p.place)}` : '') +
+      (p.place ? `\n${esc(p.place)}` : '') +
       `\n\nПокажіть цей QR контролеру, якщо попросять (до ${esc(p.until)}).`,
     captionUsedFinal: (p: { label: string; date: string; time: string; place?: string | undefined }) =>
-      `✅ <b>${esc(p.label)}</b> — використано ${esc(p.date)} о ${esc(p.time)}` + (p.place ? `\n📍 ${esc(p.place)}` : ''),
+      `✅ <b>${esc(p.label)}</b> — використано ${esc(p.date)} о ${esc(p.time)}` + (p.place ? `\n${esc(p.place)}` : ''),
     captionExpired: (p: { label: string; date: string }) =>
       `⌛ <b>${esc(p.label)}</b> — не використано (${esc(p.date)}).\nПоїздка повернулася на картку.`,
     pointer: (until: string, quota: string) => `⬆️ Ваш активний QR-квиток — вище. Дійсний до ${esc(until)}.\n${quota}`,
     pointerUsed: (time: string, quota: string) => `⬆️ Ваш квиток використано о ${esc(time)}. Його можна показати контролеру.\n${quota}`,
     placePending: 'визначаю місце…',
-    quotaLine: (used: number, limit: number) => `Сьогодні: ${used}/${limit}.`,
+    quotaLine: (used: number, limit: number | null) => `Сьогодні: ${used}${limit === null ? '' : `/${limit}`}.`,
     usedReply: (time: string, place?: string) => `✅ Ваш QR-квиток використано о ${esc(time)}${place ? ` — ${esc(place)}` : ''}.`,
     expiredReply: '⌛ Ваш QR-квиток сплив невикористаним. Поїздка повернулася на картку.',
     btnRefresh: '🔄 Оновити статус',
@@ -276,10 +276,12 @@ export const uk = {
       reserve_trips: 'Не видавати квитки, якщо на картці стільки поїздок або менше',
       low_balance_alert: 'Попереджати адмінів, коли поїздок залишилося стільки або менше',
       active_card_id: 'Активна картка (змінюється через /card)',
-      poll_interval_sec: 'Як часто перевіряти свіжі квитки, секунд',
-      poll_idle_interval_sec: 'Як часто перевіряти, коли свіжих квитків немає, секунд',
-      poll_fresh_window_min: 'Скільки хвилин після видачі невикористаний квиток вважається свіжим',
+      poll_interval_sec: 'Як часто перевіряти свіжі квитки й місця, секунд',
+      poll_idle_interval_sec: 'Як часто перевіряти в інших випадках, секунд',
+      poll_fresh_window_min: 'Скільки хвилин квиток вважається свіжим: після видачі (поки не використаний) і після сканування (пошук місця)',
       place_match_window_sec: 'Макс. розбіжність часу при визначенні місця, секунд',
+      place_search_delay_min: 'Через скільки хвилин після сканування почати шукати місце',
+      place_give_up_hours: 'Через скільки годин після сканування припинити пошук місця',
       api_rate_per_min: 'Ліміт запитів до Київ Цифровий за хвилину',
       request_cooldown_hours: 'Пауза перед повторним /request після ігнорування, годин',
       log_retention_days: 'Скільки днів зберігати журнал подій',

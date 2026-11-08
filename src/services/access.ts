@@ -153,7 +153,9 @@ export class AccessService {
     return updated;
   }
 
-  effectiveQuota(user: UserRow): number {
+  /** Tickets per day for this user; null = no limit (admins can change quotas anyway). */
+  effectiveQuota(user: UserRow): number | null {
+    if (user.role === 'admin') return null;
     return user.dailyQuota ?? this.settings.get('default_daily_quota');
   }
 
