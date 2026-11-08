@@ -9,6 +9,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
+    "assets:placeholders": "tsx scripts/draw-placeholders.ts",
     "mock": "tsx mock/main.ts",
     "dev:mock": "tsx watch --env-file-if-exists=.env mock/dev.ts"
   },

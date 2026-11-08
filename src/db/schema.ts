@@ -65,6 +65,14 @@ export const settings = sqliteTable('settings', {
   updatedAt: integer('updated_at').notNull(),
 });
 
+/** Telegram file ids of media the bot uploaded once and reuses (e.g. placeholder images). */
+export const telegramFiles = sqliteTable('telegram_files', {
+  /** What the file is, including a hash of its bytes (see qr/placeholder.ts). */
+  key: text('key').primaryKey(),
+  fileId: text('file_id').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
 export const tickets = sqliteTable(
   'tickets',
   {

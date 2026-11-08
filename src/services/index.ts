@@ -12,6 +12,7 @@ import { TicketService } from './tickets.js';
 import { PlaceResolver } from './places.js';
 import { TicketTracker } from './tracker.js';
 import { StatsService } from './stats.js';
+import { TelegramFileStore } from './telegram-files.js';
 
 export type ServiceConfig = {
   db: Db;
@@ -55,7 +56,8 @@ export function buildServices(c: ServiceConfig): Services {
   const tracker = new TicketTracker(tickets, credentials, settings, audit, maintenance, c.clock, c.log.child({ mod: 'tracker' }), c.random);
 
   const stats = new StatsService(c.db, c.clock);
+  const files = new TelegramFileStore(c.db, c.clock);
 
   access.ensureBootstrapAdmins();
-  return { clock: c.clock, log: c.log, settings, audit, access, credentials, kyiv, maintenance, tickets, tracker, stats };
+  return { clock: c.clock, log: c.log, settings, audit, access, credentials, kyiv, maintenance, tickets, tracker, stats, files };
 }

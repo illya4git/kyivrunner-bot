@@ -15,7 +15,8 @@ RUN npm run build
 # Files copied from the build context keep the host's permissions. A checkout made with a strict
 # umask (e.g. 077) would be unreadable by the runtime's non-root user, so normalise them here.
 COPY drizzle ./drizzle
-RUN chmod -R u=rwX,go=rX package.json drizzle
+COPY assets ./assets
+RUN chmod -R u=rwX,go=rX package.json drizzle assets
 
 # ---- mock Kyiv Digital API (development only; see compose.dev.yaml) -----------------
 FROM build AS mock
@@ -40,6 +41,7 @@ ENV NODE_ENV=production \
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/assets ./assets
 COPY --from=build /app/package.json ./
 RUN mkdir -p /data && chown node:node /data
 USER node

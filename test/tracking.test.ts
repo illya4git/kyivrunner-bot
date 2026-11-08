@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { OffsetClock } from '../src/core/clock.js';
+import { placeholder } from '../src/qr/placeholder.js';
 import { STUDENT_CARD_ID } from '../mock/fixtures.js';
 import { ADMIN_ID, FakeClock } from './helpers/services.js';
 import { closeTicketEnvs, ticketEnv } from './helpers/ticket-env.js';
@@ -169,6 +170,48 @@ describe('TicketTracker', () => {
 
     await s.tracker.tick();
     expect(sends(s.take(), 'editMessageMedia')).toHaveLength(0);
+  });
+
+  it('uploads each placeholder image once, then reuses its Telegram file id', async () => {
+    const s = await ticketEnv();
+    const tickets = [];
+    for (const id of [5, 6, 7]) tickets.push((await issued(s, id)).ticket);
+    s.state.validate(tickets[0]!.kdTicketId);
+    s.state.validate(tickets[1]!.kdTicketId);
+    await s.tracker.tick();
+    s.take();
+
+    s.clock.advance(14 * HOUR); // past midnight: two used images retire, one ticket expires
+    await s.tracker.tick();
+    const media = sends(s.take(), 'editMessageMedia').map((c) => (c.payload.media as { media: unknown }).media);
+    expect(media).toHaveLength(3);
+    const uploads = media.filter((m) => typeof m !== 'string');
+    expect(uploads).toHaveLength(2); // one "used", one "expired"
+    expect(media.filter((m) => typeof m === 'string')).toEqual([s.files.get(placeholder('used').key)]); // the second "used" reuses the first upload
+
+    // The next day (after the nightly maintenance): every swap reuses an id, nothing is uploaded.
+    s.clock.advance(4 * HOUR);
+    const next = (await issued(s, 8)).ticket;
+    s.clock.advance(24 * HOUR);
+    await s.tracker.tick();
+    const later = sends(s.take(), 'editMessageMedia').filter((c) => c.payload.message_id === next.messageId);
+    expect(typeof (later[0]!.payload.media as { media: unknown }).media).toBe('string');
+  });
+
+  it('uploads again when Telegram rejects a stored file id', async () => {
+    const s = await ticketEnv();
+    s.files.set(placeholder('expired').key, 'from-another-bot');
+    s.failIf.push((method, p) =>
+      method === 'editMessageMedia' && (p.media as { media: unknown }).media === 'from-another-bot' ? 'Bad Request: wrong file identifier/HTTP URL specified' : null,
+    );
+    const { ticket } = await issued(s);
+    s.clock.advance(14 * HOUR);
+    await s.tracker.tick();
+    const media = sends(s.take(), 'editMessageMedia').map((c) => (c.payload.media as { media: unknown }).media);
+    expect(media[0]).toBe('from-another-bot');
+    expect(typeof media[1]).not.toBe('string'); // re-uploaded
+    expect(s.tickets.get(ticket.id)?.status).toBe('expired');
+    expect(s.files.get(placeholder('expired').key)).toMatch(/^file-/);
   });
 
   it('makes no API calls when there is nothing to track', async () => {

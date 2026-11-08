@@ -62,7 +62,7 @@ export function createBot(opts: CreateBotOptions): { bot: Bot<BotContext>; deps:
     ...opts.services,
     menus: new CommandMenus(bot.api, opts.services.log),
     notifier: new Notifier(bot.api, opts.services.access, opts.services.log),
-    ticketView: new TicketView(bot.api, opts.services.tickets, opts.services.access, opts.services.audit, opts.services.log),
+    ticketView: new TicketView(bot.api, opts.services.tickets, opts.services.access, opts.services.audit, opts.services.files, opts.services.log),
     devMode: opts.devMode,
   };
   opts.services.tickets.setPresenter(deps.ticketView);

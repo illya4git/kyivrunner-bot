@@ -3,10 +3,11 @@ import { kyivDate, kyivTime } from '../core/clock.js';
 import type { Logger } from '../core/logger.js';
 import type { TicketRow, UserRow } from '../db/schema.js';
 import { messages, type Messages } from '../i18n/index.js';
-import { placeholderPng } from '../qr/placeholder.js';
+import { placeholder, type PlaceholderKind } from '../qr/placeholder.js';
 import { renderQr } from '../qr/render.js';
 import type { AccessService } from '../services/access.js';
 import type { AuditService } from '../services/audit.js';
+import type { TelegramFileStore } from '../services/telegram-files.js';
 import { placePending } from '../services/places.js';
 import { formatPlace } from './place.js';
 import type { Quota, TicketPresenter, TicketService, TicketTransition } from '../services/tickets.js';
@@ -14,6 +15,8 @@ import type { Quota, TicketPresenter, TicketService, TicketTransition } from '..
 const REPLY_TARGET_GONE = /message to be replied not found|replied message not found/i;
 const EDIT_TARGET_GONE = /message to edit not found|message can't be edited|MESSAGE_ID_INVALID/i;
 const NOT_MODIFIED = /message is not modified/i;
+/** A stored file id that this bot can't use (e.g. uploaded by a different bot token). */
+const BAD_FILE_ID = /wrong (remote )?file identifier|file reference|FILE_ID_INVALID|wrong file_id/i;
 
 const NO_BUTTONS = { inline_keyboard: [] };
 
@@ -29,8 +32,33 @@ export class TicketView implements TicketPresenter {
     private readonly tickets: TicketService,
     private readonly access: AccessService,
     private readonly audit: AuditService,
+    private readonly files: TelegramFileStore,
     private readonly log: Logger,
   ) {}
+
+  /**
+   * Swap a message's image for a placeholder. The image is uploaded once; afterwards the
+   * file id Telegram returned is reused, so the same bytes are never sent again.
+   */
+  private async editToPlaceholder(kind: PlaceholderKind, chat: number, msg: number, caption: string): Promise<void> {
+    const ph = placeholder(kind);
+    const edit = (media: string | InputFile) =>
+      this.api.editMessageMedia(chat, msg, { type: 'photo', media, caption, parse_mode: 'HTML' }, { reply_markup: NO_BUTTONS });
+    const known = this.files.get(ph.key);
+    if (known) {
+      try {
+        await edit(known);
+        return;
+      } catch (err) {
+        if (!isTelegramError(err, BAD_FILE_ID)) throw err;
+        this.log.warn({ key: ph.key }, 'stored Telegram file id rejected; uploading the image again');
+        this.files.forget(ph.key);
+      }
+    }
+    const res = await edit(new InputFile(ph.png, ph.filename));
+    const fileId = typeof res === 'object' && 'photo' in res ? res.photo?.at(-1)?.file_id : undefined;
+    if (fileId) this.files.set(ph.key, fileId);
+  }
 
   private t(tgId: number): Messages {
     return messages(this.access.get(tgId)?.locale ?? 'uk');
@@ -145,14 +173,7 @@ export class TicketView implements TicketPresenter {
   async retireImage(ticket: TicketRow): Promise<void> {
     if (ticket.chatId === null || ticket.messageId === null || ticket.messageGone) return;
     const t = this.t(ticket.userTgId);
-    const ok = await this.quietEdit(() =>
-      this.api.editMessageMedia(
-        ticket.chatId!,
-        ticket.messageId!,
-        { type: 'photo', media: new InputFile(placeholderPng('used'), 'used.png'), caption: this.finalCaption(t, ticket), parse_mode: 'HTML' },
-        { reply_markup: NO_BUTTONS },
-      ),
-    );
+    const ok = await this.quietEdit(() => this.editToPlaceholder('used', ticket.chatId!, ticket.messageId!, this.finalCaption(t, ticket)));
     if (!ok) this.tickets.markMessageGone(ticket.id);
   }
 
@@ -187,17 +208,7 @@ export class TicketView implements TicketPresenter {
         // Keep the QR image: conductors may need to re-scan it until midnight.
         await this.api.editMessageCaption(chat, msg, { caption: this.present(t, ticket).caption, reply_markup: NO_BUTTONS });
       } else {
-        await this.api.editMessageMedia(
-          chat,
-          msg,
-          {
-            type: 'photo',
-            media: new InputFile(placeholderPng('expired'), 'expired.png'),
-            caption: t.tickets.captionExpired({ label: this.label(ticket), date: kyivDate(ticket.expireAt) }),
-            parse_mode: 'HTML',
-          },
-          { reply_markup: NO_BUTTONS },
-        );
+        await this.editToPlaceholder('expired', chat, msg, t.tickets.captionExpired({ label: this.label(ticket), date: kyivDate(ticket.expireAt) }));
       }
       return true;
     } catch (err) {

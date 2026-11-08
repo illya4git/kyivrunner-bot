@@ -22,6 +22,13 @@
       "when": 1794171125077,
       "tag": "0002_place_search",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794180084626,
+      "tag": "0003_telegram_files",
+      "breakpoints": true
     }
   ]
 }

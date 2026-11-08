@@ -161,6 +161,10 @@ npm run typecheck
 
 Schema changes: edit `src/db/schema.ts`, run `npm run db:generate`, and commit the new file in `drizzle/`.
 
+The images that replace a QR once it's used (after midnight) or expired are `assets/ticket-used.png`
+and `assets/ticket-expired.png`. Replace them with any artwork, or redraw the defaults with
+`npm run assets:placeholders`. Each is uploaded to Telegram once; later swaps reuse its file id.
+
 ### Mock Kyiv Digital API
 
 `npm run dev:mock` starts the mock and the bot together. On each start it resets the bot's mock

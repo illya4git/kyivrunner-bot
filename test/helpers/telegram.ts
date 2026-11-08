@@ -28,6 +28,7 @@ export function makeTestBot(services: Services) {
   const calls: ApiCall[] = [];
   let nextMessageId = 1;
   let nextUpdateId = 1;
+  let nextFileId = 1;
   /** Methods to fail on purpose: method → Telegram error description. */
   const failures = new Map<string, string>();
   /** Targeted failures: return a Telegram error description to fail that call. */
@@ -51,10 +52,14 @@ export function makeTestBot(services: Services) {
       if (err) throw new Error(`Telegram would reject ${method}.${field}: ${err}\n---\n${value}`);
     }
     const chat = { id: Number(p.chat_id ?? 0), type: 'private' as const };
-    const message =
-      method === 'sendPhoto'
-        ? { message_id: nextMessageId++, date: 0, chat, photo: [{ file_id: 'f', file_unique_id: 'u', width: 640, height: 640 }], caption: p.caption }
-        : { message_id: nextMessageId++, date: 0, chat, text: p.text };
+    // Photos get a file id: the one sent (a reuse), or a new one for an upload.
+    const media = p.media as Record<string, unknown> | undefined;
+    const sentPhoto = method === 'sendPhoto' ? p.photo : method === 'editMessageMedia' ? media?.media : undefined;
+    const photo =
+      sentPhoto === undefined ? undefined : [{ file_id: typeof sentPhoto === 'string' ? sentPhoto : `file-${nextFileId++}`, file_unique_id: 'u', width: 640, height: 640 }];
+    const message = photo
+      ? { message_id: method === 'sendPhoto' ? nextMessageId++ : Number(p.message_id), date: 0, chat, photo, caption: p.caption ?? media?.caption }
+      : { message_id: nextMessageId++, date: 0, chat, text: p.text };
     const result = method.startsWith('send') || method.startsWith('edit') ? message : true;
     return { ok: true, result } as never;
   };

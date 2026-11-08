@@ -80,6 +80,7 @@ Operations: [README.md](README.md)
 | D32 | **Admins have no per-user daily quota** (they can change quotas anyway). The global daily cap and the trip reserve still apply to them. A quota stored for an admin takes effect if they're demoted. |
 | D33 | **Polling jitter:** every tracker interval (`/qr`, feed, idle pass) varies by ±20%, re-rolled after each request, so the calls don't form an exact rhythm. The place-search delay and give-up time are not jittered. |
 | D34 | **Nightly maintenance** (00:00–01:00 until 03:00 Kyiv; only generate is refused, with a 422 naming the end time). The client recognises the message, records the end time, and from then on **sends no requests at all** until it passes (`KyivError` `maintenance`, raised locally). `/qr` replies with a translated "🌙 … after 03:00", isn't charged to the quota, and is logged as `cap_denied` `reason: maintenance`; the start is logged once as a `maintenance` event. The tracker keeps its idle passes (liveness, images) without API calls and resumes within a minute of the end. Admins are alerted only if it starts outside 23:30–04:00 (once a day). The window isn't blocked in advance, because generation may still work between 00:00 and its actual start. No "notify me" button (decided against). |
+| D35 | **Placeholder images are static files** (`assets/ticket-used.png`, `assets/ticket-expired.png`, drawn once by `npm run assets:placeholders` or replaced with any artwork) and **uploaded to Telegram only once**: the returned `file_id` is stored in `telegram_files` under a key that includes a hash of the image, and reused for every later swap. A changed image gets a new key (one new upload); an id Telegram rejects (e.g. after switching bot tokens) is forgotten and the image uploaded again. QR images are unique per ticket and still uploaded. |
 
 ---
 
@@ -228,9 +229,11 @@ tickets(id PK, kd_ticket_id UNIQUE, user_tg_id → users, card_id, code, kyiv_da
         chat_id, message_id, message_gone, resend_count, status_reply_id, image_retired)
 
 events(id PK, ts, tg_id NULL, role_at_time, kind, data JSON)
+
+telegram_files(key PK, file_id, updated_at)   -- reusable uploads, see D35
 ```
 
-Migrations: `0000_init`, `0001_ticket_label`, `0002_place_search` (also re-opens the search for used tickets that never got a place).
+Migrations: `0000_init`, `0001_ticket_label`, `0002_place_search` (also re-opens the search for used tickets that never got a place), `0003_telegram_files`.
 
 Event kinds: `interaction`, `denied`, `access_requested`, `access_request_ignored`, `ticket_issued`,
 `ticket_pointed`, `ticket_resent`, `ticket_used` (with `reportedAfterSec` or `missingFromList`), `ticket_expired`, `place_found` (with `foundAfterSec`), `place_unresolved`, `quota_denied`,
@@ -311,15 +314,17 @@ src/
   main.ts  jobs.ts
   core/      config clock crypto csv backup health html logger mutex
   db/        schema client
-  kyiv/      client envelope schemas rate-limit errors
-  services/  index access audit credentials settings tickets places tracker stats
+  kyiv/      client envelope schemas rate-limit errors maintenance
+  services/  index access audit credentials settings tickets places tracker stats telegram-files
   bot/       bot context deps menus keyboards notifier alerts role-effects ticket-view kyiv-errors
-             middleware/core  commands/{public,user-tickets,admin-users,admin-credentials,admin-card,admin-reports,fallback,dev}
+             place  middleware/core  commands/{public,user-tickets,admin-users,admin-credentials,admin-card,admin-reports,fallback,dev}
   i18n/      uk en index
-  qr/        render placeholder
+  qr/        render (QR images), placeholder (loads assets/)
 mock/        server state fixtures jwt main dev panel.html
-drizzle/     0000_init 0001_ticket_label
+drizzle/     0000_init 0001_ticket_label 0002_place_search 0003_telegram_files
 test/        helpers/{services,telegram,telegram-html,kyiv,ticket-env}  *.test.ts
+assets/      ticket-used.png  ticket-expired.png
+scripts/     draw-placeholders.ts (npm run assets:placeholders)
 Dockerfile  compose.yaml  compose.dev.yaml  .env.example  README.md  PLAN.md  docs/
 ```
 

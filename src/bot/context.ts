@@ -1,3 +1,4 @@
+import type { TelegramFileStore } from '../services/telegram-files.js';
 import type { MaintenanceState } from '../kyiv/maintenance.js';
 import type { Context } from 'grammy';
 import type { Clock } from '../core/clock.js';
@@ -25,6 +26,7 @@ export type Services = {
   tickets: TicketService;
   tracker: TicketTracker;
   stats: StatsService;
+  files: TelegramFileStore;
 };
 
 /** Per-update context. `user` and `t` are set by the loadUser middleware before any handler runs. */
