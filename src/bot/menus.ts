@@ -1,3 +1,4 @@
+import { UK_LANGUAGE_CODES } from '../services/access.js';
 import type { Api, RawApi } from 'grammy';
 import type { Logger } from '../core/logger.js';
 import type { Role, UserRow } from '../db/schema.js';
@@ -49,7 +50,9 @@ export class CommandMenus {
   /** Default menu (guests and anyone without a per-chat menu), in both languages. */
   async syncDefault(): Promise<void> {
     await this.api.setMyCommands(commandsFor('guest', messages('en')));
-    await this.api.setMyCommands(commandsFor('guest', messages('uk')), { language_code: 'uk' });
+    for (const language_code of UK_LANGUAGE_CODES) {
+      await this.api.setMyCommands(commandsFor('guest', messages('uk')), { language_code });
+    }
   }
 
   async syncUser(user: Pick<UserRow, 'tgId' | 'role' | 'locale'>): Promise<void> {

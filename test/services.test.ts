@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ADMIN_ID, makeServices } from './helpers/services.js';
+import { localeFromLanguageCode } from '../src/services/access.js';
 
 describe('SettingsService', () => {
   it('returns defaults, persists and validates', () => {
@@ -89,5 +90,12 @@ describe('AccessService', () => {
     const u = access.get(9)!;
     expect(access.effectiveQuota(u)).toBe(settings.get('default_daily_quota'));
     expect(access.effectiveQuota(access.setQuota(9, 5, ADMIN_ID)!)).toBe(5);
+  });
+});
+
+describe('localeFromLanguageCode', () => {
+  it('gives Ukrainian to Ukrainian and Russian, English to everything else', () => {
+    for (const code of ['uk', 'uk-UA', 'ru', 'RU', 'ru-RU', 'ru_UA']) expect(localeFromLanguageCode(code)).toBe('uk');
+    for (const code of ['en', 'en-US', 'pl', 'de', 'be', 'rue', 'ukx', '', undefined]) expect(localeFromLanguageCode(code)).toBe('en');
   });
 });

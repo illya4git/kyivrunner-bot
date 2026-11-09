@@ -50,7 +50,7 @@ Operations: [README.md](README.md)
 | D2 | **One card** for everyone (`active_card_id`, picked at credential setup or with `/card`). |
 | D3 | Quota counts **issued** codes per Kyiv day. |
 | D4 | A global daily cap and a trip reserve, both on by default and admin-tunable. |
-| D5 | UI in **Ukrainian and English**, picked from Telegram's `language_code` (`uk` → Ukrainian, anything else → English), switchable with `/lang`. |
+| D5 | UI in **Ukrainian and English**, picked from Telegram's `language_code` (`uk` or `ru` → Ukrainian, anything else → English), switchable with `/lang`. |
 | D6 | Credentials are entered **in the bot chat**. Each message is deleted right after reading. |
 | D7 | Admins hear about a guest **only on `/request`**. |
 | D8 | Deployment is a **single Docker container** with one volume, multi-arch (`linux/amd64`, `linux/arm64`). |

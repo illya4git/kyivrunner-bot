@@ -86,7 +86,8 @@ Runtime settings are changed in the bot with `/set` (see `/settings` for descrip
 | Admins | `/users` (role, quota, stats and log per user), `/requests`, `/grant`, `/revoke`, `/quota`, `/settings`, `/set`, `/stats [today\|week\|month\|all]`, `/logs [id\|@user] [count]`, `/export [tickets\|events] [days\|all]`, `/card`, `/credentials [set\|check\|clear]`, `/cancel`, `/pause`, `/resume` |
 | Admins, DEV_MODE | `/dev clock [+2h\|-30m\|+1d\|midnight\|reset]`, `/dev tick` |
 
-The bot speaks Ukrainian and English, chosen from the Telegram language and switchable with `/lang`.
+The bot speaks Ukrainian and English, chosen from the Telegram language (Ukrainian for Ukrainian and
+Russian, English otherwise) and switchable with `/lang`.
 
 ## Operations
 

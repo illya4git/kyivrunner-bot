@@ -13,8 +13,12 @@ export type TelegramFrom = {
   language_code?: string | undefined;
 };
 
+/** Telegram language codes that get the Ukrainian UI: Ukrainian and Russian. Everything else gets English. */
+export const UK_LANGUAGE_CODES = ['uk', 'ru'] as const;
+
 export function localeFromLanguageCode(code: string | undefined): Locale {
-  return code?.toLowerCase().startsWith('uk') ? 'uk' : 'en';
+  const lang = code?.toLowerCase().split(/[-_]/)[0];
+  return (UK_LANGUAGE_CODES as readonly (string | undefined)[]).includes(lang) ? 'uk' : 'en';
 }
 
 export type RoleChangeResult =
